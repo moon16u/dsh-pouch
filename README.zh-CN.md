@@ -24,6 +24,7 @@
 | **[`@moon16u/dsh-plugin-current-time`](./packages/dsh-plugin-current-time)** | Host / Agent | 每轮对话开始时向 Agent 上下文注入宿主机的真实日期、时间与时区，长会话跨天也不会再按旧日期推理。 |
 | **[`@moon16u/dsh-plugin-session-id`](./packages/dsh-plugin-session-id)** | Web UI | 在 Web 会话顶栏右侧显示当前 Session ID，支持一键快速复制到剪贴板。 |
 | **[`@moon16u/dsh-plugin-web-search-tavily`](./packages/dsh-plugin-web-search-tavily)** | Capability Seam | 基于 Tavily REST API 的真实网络搜索提供方，无缝接入 DSH 官方 `ctx.web` 网络能力标准。 |
+| **[`@moon16u/dsh-plugin-llm-headers`](./packages/dsh-plugin-llm-headers)** | LLM 接缝 | 请求头由 `settings.yaml` 说了算的供应方路由（含 DSH 保留的 `User-Agent`）：字面量、`${env:NAME}` 插值、按模型覆盖、`null` 删除，pi-ai 自带的 37 个供应方只写 headers 即可接入。 |
 
 ---
 
@@ -31,7 +32,7 @@
 
 ### 方式一：通过 DSH CLI 一行命令一键安装（推荐 ⭐️⭐️⭐️⭐️⭐️）
 
-只需在终端执行一行命令，DSH 将自动下载并加载全部 4 个实用插件（0 手动配置，开箱即用）：
+只需在终端执行一行命令，DSH 将自动下载并加载全部 5 个实用插件（0 手动配置，开箱即用）：
 
 ```bash
 # 1. 一键安装整套工具箱（来自 npm）
@@ -75,6 +76,10 @@ dsh plugin --profile web add https://github.com/moon16u/dsh-pouch.git
 ### 4. `@moon16u/dsh-plugin-web-search-tavily`
 * **痛点**：默认搜索引擎可能受限或无法获取高质量结构化检索结果。
 * **解决**：标准实现 DSH 的 `ctx.web.registerSearchProvider` 接口，支持通过环境变量 `TAVILY_API_KEY` 或 DSH Credentials 凭据管理服务安全解析密钥。
+
+### 5. `@moon16u/dsh-plugin-llm-headers`
+* **痛点**：DSH 在每个供应方请求上最后合入自己的 attribution `User-Agent`，`llm-pi-ai` 里的 `headers` 无法覆盖这个保留名。按客户端标识鉴权的网关——腾讯 CodeBuddy 会返回 `500 {"code":11128,"msg":"request illegal"}`——单靠配置无法接入。
+* **方案**：用自己的 `llm-headers` 段落声明路由，仍交给官方 `PiAiAdapter` 承载，只把 pi-ai provider 包了一层，让配置的请求头在进入 socket 前拿到最后一次写权。另附一个**请求头**设置页（独立左侧栏入口）——官方提供方卡片没有对外 slot，且写进 `llm-pi-ai` 的请求头本就会被剥掉。包 provider 而不是协议对象，是为了让 pi-ai 自带的路由保留自己的 API 实现——这类路由两行就能接。未配置 headers 的路由照常发送 DSH attribution，且拒绝删除它。
 
 ---
 

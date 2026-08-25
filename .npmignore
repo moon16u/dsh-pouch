@@ -1,0 +1,7 @@
+# stray runtime logs (npm's ignore globs are shallow — name them)
+scripts/dsh-restart.sh.schedule.log
+*.log
+.DS_Store
+.env*
+dist/
+coverage/

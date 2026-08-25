@@ -8,6 +8,7 @@
     ".": "./lib/index.js",
     "./client": "./lib/client.js",
     "./current-time": "./packages/dsh-plugin-current-time/lib/index.js",
+    "./llm-headers": "./packages/dsh-plugin-llm-headers/lib/index.js",
     "./restart": "./packages/dsh-plugin-restart/lib/index.js",
     "./session-id": "./packages/dsh-plugin-session-id/lib/index.js",
     "./session-id/client": "./packages/dsh-plugin-session-id/lib/client.js",
@@ -27,9 +28,11 @@
     },
     "client": {
       "inject": [
+        "@deepseek-ai/dsh-client-connection",
         "@deepseek-ai/dsh-client-locale",
         "@deepseek-ai/dsh-client-runtime",
         "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-settings",
         "@deepseek-ai/dsh-client-ui-slots"
       ],
       "platform": "web"

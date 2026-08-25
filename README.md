@@ -31,7 +31,7 @@
 
 ### Method 1: One-Command Installation via DSH CLI (Recommended ⭐️⭐️⭐️⭐️⭐️)
 
-Run a single command in your terminal. DSH will automatically download, bundle-register, and mount all 4 pocket plugins (zero manual configuration):
+Run a single command in your terminal. DSH will automatically download, bundle-register, and mount all 5 pocket plugins (zero manual configuration):
 
 ```bash
 # 1. Install the entire toolkit via npm (recommended)
