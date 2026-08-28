@@ -1,0 +1,6 @@
+# dsh-mcp-console bundle patch: inserts the console into the loader tree when
+# this package is installed as a standalone bundle (inside @moon16u/dsh-pouch
+# the root pouch patch already loads it; this file is inert there).
+- insert:
+    - id: ui-mcp-console
+      name: '@moon16u/dsh-plugin-mcp-console'
