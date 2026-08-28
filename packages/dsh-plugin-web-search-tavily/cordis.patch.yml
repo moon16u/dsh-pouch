@@ -1,0 +1,6 @@
+# @moon16u/dsh-plugin-web-search-tavily bundle patch: inserts the plugin into the loader tree
+# when this package is installed standalone (inside @moon16u/dsh-pouch
+# the root pouch patch already loads it; this file is inert there).
+- insert:
+    - id: web-search-tavily
+      name: '@moon16u/dsh-plugin-web-search-tavily'

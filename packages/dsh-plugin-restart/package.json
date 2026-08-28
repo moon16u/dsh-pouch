@@ -10,11 +10,13 @@
       "types": "./lib/types/index.d.ts",
       "default": "./lib/index.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./cordis.patch.yml": "./cordis.patch.yml"
   },
   "files": [
     "lib",
-    "scripts"
+    "scripts",
+    "cordis.patch.yml"
   ],
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
@@ -33,5 +35,10 @@
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
   }
 }

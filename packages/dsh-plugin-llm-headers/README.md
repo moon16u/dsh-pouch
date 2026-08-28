@@ -1,5 +1,7 @@
 # @moon16u/dsh-plugin-llm-headers
 
+**English** | [中文](./README.zh-CN.md)
+
 Provider routes for DeepSeek Harness whose request headers are yours to set from
 `settings.yaml` — including the ones the harness reserves for itself.
 
@@ -285,6 +287,15 @@ Ships inside the [`@moon16u/dsh-pouch`](../../README.md) bundle:
 ```bash
 dsh plugin --profile web add @moon16u/dsh-pouch
 ```
+
+Or install this plugin standalone:
+
+```bash
+dsh plugin --profile web add @moon16u/dsh-plugin-llm-headers
+```
+
+Either way, **restart `dsh web` once** after installing. No manual
+`cordis.patch.yml` edits needed — the package carries its own patch.
 
 ## Tests
 

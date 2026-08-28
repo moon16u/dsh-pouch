@@ -1,5 +1,7 @@
 # @moon16u/dsh-plugin-current-time
 
+**English** | [中文](./README.zh-CN.md)
+
 Inject the host's current date and time into agent context at the start of every turn.
 
 ## Why
@@ -48,8 +50,21 @@ data the reminder still carries the numeric UTC offset.
 
 ## Install
 
-Ships as part of the [`@moon16u/dsh-pouch`](../..) bundle — no separate
-installation step. The bundle's host entry mounts it automatically.
+Ships as part of the [`@moon16u/dsh-pouch`](../../README.md) bundle (recommended) — no separate
+installation step. The bundle's host entry mounts it automatically:
+
+```bash
+dsh plugin --profile web add @moon16u/dsh-pouch
+```
+
+Or install this plugin standalone:
+
+```bash
+dsh plugin --profile web add @moon16u/dsh-plugin-current-time
+```
+
+Either way, **restart `dsh web` once** after installing. No manual
+`cordis.patch.yml` edits needed — the package carries its own patch.
 
 ## Test
 
