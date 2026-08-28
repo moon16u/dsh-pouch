@@ -1,6 +1,6 @@
 {
   "name": "@moon16u/dsh-plugin-web-search-tavily",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Tavily-backed search provider for the DeepSeek Harness web capability seam (ctx.web)",
   "type": "module",
   "main": "lib/index.js",

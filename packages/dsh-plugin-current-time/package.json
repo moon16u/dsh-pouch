@@ -1,6 +1,6 @@
 {
   "name": "@moon16u/dsh-plugin-current-time",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Inject the host's current date and time into agent context at the start of every turn",
   "type": "module",
   "main": "lib/index.js",
