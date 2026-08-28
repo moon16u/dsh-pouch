@@ -28,7 +28,14 @@ function requireShim(id) {
     };
   }
   if (id === "@deepseek-ai/dsh-client-ui-primitives") {
-    return { IconCopyOutline16: () => null, IconCheckOutline16: () => null };
+    // the mcp-console settings section also uses refresh/trash/close icons
+    return {
+      IconCopyOutline16: () => null,
+      IconCheckOutline16: () => null,
+      IconRefreshOutline16: () => null,
+      IconTrashOutline16: () => null,
+      IconCloseOutline16: () => null,
+    };
   }
   throw new Error(`the bundle required an unexpected module: ${id}`);
 }
@@ -104,8 +111,9 @@ test("apply registers the headers section beside the session-id badge", async ()
   assert.deepEqual(slots, [
     "conversation.session.header.utilities#dsh-session-id",
     "settings.section#llm-headers",
+    "settings.section#mcp-console",
   ]);
-  assert.deepEqual(dictionaries, ["session-id", "llm-headers"]);
+  assert.deepEqual(dictionaries, ["session-id", "llm-headers", "mcp-console"]);
 
   const section = registered[1];
   assert.equal(section.component, bundle.HeadersSection);
@@ -135,8 +143,10 @@ test("the badge still mounts on a host with no settings surface", async () => {
   bundle.apply(scope);
 
   // Deferring on the settings services rather than declaring them in `inject`
-  // is what keeps this true.
-  assert.deepEqual(registered.map((entry) => entry.id), ["dsh-session-id"]);
+  // is what keeps this true. (The stub's slots.inject fires immediately, so
+  // the mcp-console section registers here too; on a real host without a
+  // settings page its slot is never declared and it never mounts.)
+  assert.deepEqual(registered.map((entry) => entry.id), ["dsh-session-id", "mcp-console"]);
 });
 
 test("rowsOf renders a stored header map as editable rows", async () => {

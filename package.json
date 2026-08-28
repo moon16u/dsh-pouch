@@ -1,6 +1,6 @@
 {
   "name": "@moon16u/dsh-pouch",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A collection of small, beautiful, and practical plugins for DeepSeek Harness (DSH)",
   "type": "module",
   "main": "./lib/index.js",
@@ -9,6 +9,8 @@
     "./client": "./lib/client.js",
     "./current-time": "./packages/dsh-plugin-current-time/lib/index.js",
     "./llm-headers": "./packages/dsh-plugin-llm-headers/lib/index.js",
+    "./mcp-console": "./packages/dsh-plugin-mcp-console/lib/index.js",
+    "./mcp-console/client": "./packages/dsh-plugin-mcp-console/lib/client.js",
     "./restart": "./packages/dsh-plugin-restart/lib/index.js",
     "./session-id": "./packages/dsh-plugin-session-id/lib/index.js",
     "./session-id/client": "./packages/dsh-plugin-session-id/lib/client.js",

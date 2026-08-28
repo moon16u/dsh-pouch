@@ -25,6 +25,7 @@
 | **[`@moon16u/dsh-plugin-session-id`](./packages/dsh-plugin-session-id)** | Web UI | Displays a native-styled Session ID badge in the web session header with one-click clipboard copy. |
 | **[`@moon16u/dsh-plugin-web-search-tavily`](./packages/dsh-plugin-web-search-tavily)** | Capability Seam | Real-time web search provider backed by the Tavily REST API, seamlessly integrating with DSH's `ctx.web` capability seam. |
 | **[`@moon16u/dsh-plugin-llm-headers`](./packages/dsh-plugin-llm-headers)** | LLM Seam + Web UI | Provider routes whose request headers are yours to set from `settings.yaml` — including the `User-Agent` the harness reserves for itself: literals, `${env:NAME}` interpolation, per-model overrides, `null` deletion, plus a visual **Request Headers** settings page. Wire up any of pi-ai's 37 built-in providers with headers only. |
+| **[`@moon16u/dsh-plugin-mcp-console`](./packages/dsh-plugin-mcp-console)** | Web UI + Host | MCP server console in the settings page: runtime add/edit/enable/disable/reconnect/delete, per-tool switches, live status over SSE, and mcpServers JSON import. Zero MCP protocol code — everything rides the official `@deepseek-ai/dsh-mcp-client`. Profile-YAML MCP entries are auto-migrated into dynamic management on boot/refresh (and exportable back). |
 
 ---
 
@@ -32,7 +33,7 @@
 
 ### Method 1: One-Command Installation via DSH CLI (Recommended ⭐️⭐️⭐️⭐️⭐️)
 
-Run a single command in your terminal. DSH will automatically download, bundle-register, and mount all 5 pocket plugins (zero manual configuration):
+Run a single command in your terminal. DSH will automatically download, bundle-register, and mount all 6 pocket plugins (zero manual configuration):
 
 ```bash
 # 1. Install the entire toolkit via npm (recommended)
@@ -80,6 +81,10 @@ dsh plugin --profile web add https://github.com/moon16u/dsh-pouch.git
 ### 5. `@moon16u/dsh-plugin-llm-headers`
 * **Problem**: DSH merges its own attribution `User-Agent` into every provider request last, and a `headers` map written into `llm-pi-ai` cannot override that reserved name. Gateways that authenticate by client identity — Tencent CodeBuddy returns `500 {"code":11128,"msg":"request illegal"}` — are unreachable with configuration alone.
 * **Solution**: Declare routes in your own `llm-headers` settings section, still served by the official `PiAiAdapter`; only the pi-ai provider is wrapped, so the configured headers get the final word before the socket. Ships with a **Request Headers** settings page (independent sidebar entry) — the stock provider cards expose no slot, and headers written into `llm-pi-ai` are stripped anyway. Wrapping the provider rather than the protocol object keeps pi-ai's own route implementations, so such routes wire up in a couple of lines. Routes without configured headers keep sending the DSH attribution unchanged, and deleting it is refused.
+
+### 6. `@moon16u/dsh-plugin-mcp-console`
+* **Problem**: The official way to attach MCP servers is a static `cordis.patch.yml` entry — no GUI, no runtime changes, and every restart to apply an edit. Declared servers show up as untouchable read-only instances.
+* **Solution**: A full **MCP servers** settings section managing the official `@deepseek-ai/dsh-mcp-client` at runtime: one fiber per server via cordis dynamic assembly (hot edit, no DSH restart), master switches, per-tool enable/disable pills, live status + tool lists over SSE, and mcpServers JSON import. External agents writing MCP entries into `cordis.patch.yml` are handled by an auto-ingest engine: on boot/refresh the entries are migrated into `~/.dsh/dsh-mcp.json` (fiber takeover included, YAML trimmed precisely), reversible via `POST /export-yaml`. Secrets stay masked in every API response.
 
 ---
 
