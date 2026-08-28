@@ -91,17 +91,48 @@ test("pouch root package.json exports mcp-console subpaths", async () => {
   assert.equal(pkg.exports["./mcp-console/client"], "./packages/dsh-plugin-mcp-console/lib/client.js");
 });
 
-test("resolveMcpClient finds the official client on this machine", async () => {
-  const client = await resolveMcpClient();
-  assert.equal(client.name, "mcp-client");
-  assert.deepEqual(client.inject, ["tools"]);
-  assert.equal(typeof client.apply, "function");
-  assert.ok(client.Config != null, "official client exports a Config schema");
+test("resolveMcpClient finds the official client from a profile tree", { skip: process.env.DSH_PROFILE_CLIENT_TEST === "0" }, async () => {
+  // Build an isolated fake DSH_HOME with a profiles/node_modules tree that
+  // resolves the REAL official client (peer dep of this workspace), so the
+  // dynamic-resolution path is exercised without depending on the host's
+  // ~/.dsh — CI runners have none.
+  const { mkdtempSync, mkdirSync, symlinkSync, rmSync, existsSync, readlinkSync } = await import("node:fs");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const { createRequire } = await import("node:module");
+  const selfRequire = createRequire(new URL("../lib/index.js", import.meta.url));
+  const clientDir = path.dirname(selfRequire.resolve("@deepseek-ai/dsh-mcp-client"));
+  const home = mkdtempSync(join(os.tmpdir(), "mcp-console-res-"));
+  const hoisted = path.join(home, "profiles", "node_modules", "@deepseek-ai");
+  mkdirSync(hoisted, { recursive: true });
+  symlinkSync(clientDir, path.join(hoisted, "dsh-mcp-client"), "dir");
+
+  try {
+    const bases = resolutionBases(home);
+    assert.ok(
+      bases.some((base) => base.endsWith(join("profiles", "node_modules"))),
+      JSON.stringify(bases),
+    );
+    // the hoisted base resolves to the real client module
+    const req = createRequire(path.join(path.join(home, "profiles", "node_modules"), "anchor.js"));
+    const resolved = req.resolve("@deepseek-ai/dsh-mcp-client");
+    assert.ok(existsSync(resolved));
+    assert.ok(readlinkSync(path.join(hoisted, "dsh-mcp-client")).length > 0);
+    // and importing through it yields the official plugin face
+    const { pathToFileURL } = await import("node:url");
+    const client = await import(pathToFileURL(resolved).href);
+    assert.equal(client.name, "mcp-client");
+    assert.deepEqual(client.inject, ["tools"]);
+    assert.equal(typeof client.apply, "function");
+    assert.ok(client.Config != null, "official client exports a Config schema");
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
 });
 
-test("resolutionBases includes the profiles hoisted root", () => {
-  const bases = resolutionBases();
-  assert.ok(bases.some((base) => base.endsWith(join("profiles", "node_modules"))), JSON.stringify(bases));
+test("resolutionBases is empty on a host without profiles", () => {
+  const bases = resolutionBases("/nonexistent-dsh-home-" + Date.now());
+  assert.deepEqual(bases, []);
 });
 
 test("orchestrator precheck rejects bad, duplicate and external names", async () => {
