@@ -91,6 +91,49 @@ function settingsServices() {
   };
 }
 
+/** A minimal scope for `wireOf`: service lookup only, no plugin machinery. */
+function scopeOf(services) {
+  return { get: (name) => services[name] };
+}
+
+/** The 0.1.2 Remote namespaces: payload-direct Results, positional args. */
+function modernServices() {
+  const calls = { providers: [], configurable: [], mutate: [] };
+  return {
+    calls,
+    remote: {
+      llm: {
+        listProviders: () => {
+          calls.providers.push([]);
+          return Promise.resolve({
+            ok: true,
+            value: [
+              { id: "codebuddy", name: "CodeBuddy" },
+              { id: "deepseek", name: "DeepSeek" },
+            ],
+          });
+        },
+        listConfigurableProviders: () => {
+          calls.configurable.push([]);
+          return Promise.resolve({
+            ok: true,
+            value: [
+              { provider: "deepseek", displayName: "DeepSeek", settingsNs: "llm-deepseek", settingsPath: [] },
+              { provider: "openrouter", displayName: "OpenRouter", settingsNs: "llm-pi-ai", settingsPath: ["providers", "openrouter"] },
+            ],
+          });
+        },
+      },
+      settings: {
+        mutate: (ns, ops, expectedRevision) => {
+          calls.mutate.push({ ns, ops, expectedRevision });
+          return Promise.resolve({ ok: true, value: { ns, value: { providers: {} } } });
+        },
+      },
+    },
+  };
+}
+
 test("the bundle exports the plugin surface DSH loads", async () => {
   const bundle = await loadBundle();
 
@@ -130,10 +173,155 @@ test("the section carries the wire faces it renders from", async () => {
   bundle.apply(scope);
   const injected = registered[1].inject();
 
-  assert.equal(injected.api, services.connection.api);
+  // The api seat is the dual-version facade, not a captured carrier object.
+  assert.equal(typeof injected.api.providers, "function");
+  assert.equal(typeof injected.api.mutate, "function");
   assert.equal(injected.schema, services.settingsSchema);
   assert.equal(typeof injected.mirror.getSnapshot, "function");
   assert.equal(typeof injected.t, "function");
+});
+
+test("the wire face keeps one identity across inject calls", async () => {
+  const bundle = await loadBundle();
+  const { scope, registered } = contextStub(settingsServices());
+
+  bundle.apply(scope);
+
+  // The section's effect deps key on this object; a fresh facade per call
+  // would refetch providers on every render.
+  assert.equal(registered[1].inject().api, registered[1].inject().api);
+});
+
+test("wireOf serves a 0.1.2 host through the Remote namespaces", async () => {
+  const { wireOf } = await loadBundle();
+  const services = modernServices();
+
+  const response = await wireOf(scopeOf(services)).providers();
+
+  // Declared rows first with live/dormant state, then routes with no declaration.
+  assert.deepEqual(response.result.value.providers, [
+    { provider: "deepseek", displayName: "DeepSeek", settingsNs: "llm-deepseek", active: true },
+    { provider: "openrouter", displayName: "OpenRouter", settingsNs: "llm-pi-ai", active: false },
+    { provider: "codebuddy", displayName: "CodeBuddy", settingsNs: "", active: true },
+  ]);
+  assert.equal(services.calls.providers.length, 1);
+  assert.equal(services.calls.configurable.length, 1);
+});
+
+test("wireOf writes through a 0.1.2 host with positional args and a direct Result", async () => {
+  const { wireOf } = await loadBundle();
+  const services = modernServices();
+  const ops = [{ op: "set", path: ["providers", "codebuddy", "headers"], value: { "user-agent": "x" } }];
+
+  const written = await wireOf(scopeOf(services)).mutate("llm-headers", ops, 7);
+
+  assert.deepEqual(services.calls.mutate, [{ ns: "llm-headers", ops, expectedRevision: 7 }]);
+  // The facade keeps the 0.1.1 envelope the section body reads.
+  assert.equal(written.result.ok, true);
+  assert.deepEqual(written.result.value, { ns: "llm-headers", value: { providers: {} } });
+});
+
+test("wireOf surfaces a 0.1.2 conflict answer through the shared envelope", async () => {
+  const { wireOf } = await loadBundle();
+  const services = modernServices();
+  services.remote.settings.mutate = () =>
+    Promise.resolve({ ok: false, error: { code: "settings-conflict", message: "stale revision" } });
+
+  const written = await wireOf(scopeOf(services)).mutate("llm-headers", [], 1);
+
+  assert.equal(written.result.ok, false);
+  assert.equal(written.result.error.code, "settings-conflict");
+  assert.equal(written.result.error.message, "stale revision");
+});
+
+test("wireOf falls back to connection.api on a 0.1.1 host", async () => {
+  const { wireOf } = await loadBundle();
+  const calls = { providers: [], mutate: [] };
+  const services = {
+    connection: {
+      api: {
+        llm: {
+          providers: (payload) => {
+            calls.providers.push(payload);
+            return Promise.resolve({ result: { ok: true, value: { providers: [
+              { provider: "codebuddy", displayName: "CodeBuddy", settingsNs: "llm-headers", active: true },
+            ] } } });
+          },
+        },
+        settings: {
+          mutate: (payload) => {
+            calls.mutate.push(payload);
+            return Promise.resolve({ result: { ok: true, value: { ns: payload.ns } } });
+          },
+        },
+      },
+    },
+  };
+
+  const wire = wireOf(scopeOf(services));
+  const response = await wire.providers();
+  const written = await wire.mutate("llm-headers", [{ op: "set", path: [], value: 1 }], 3);
+
+  // Passes the 0.1.1 payloads through untouched, envelope already correct.
+  assert.deepEqual(calls.providers, [{}]);
+  assert.deepEqual(calls.mutate, [{ ns: "llm-headers", ops: [{ op: "set", path: [], value: 1 }], expectedRevision: 3 }]);
+  assert.deepEqual(response.result.value.providers, [
+    { provider: "codebuddy", displayName: "CodeBuddy", settingsNs: "llm-headers", active: true },
+  ]);
+  assert.deepEqual(written.result.value, { ns: "llm-headers" });
+});
+
+test("wireOf prefers the Remote namespaces when both carriers exist", async () => {
+  const { wireOf } = await loadBundle();
+  const services = modernServices();
+  services.connection = {
+    api: {
+      llm: { providers: () => { throw new Error("legacy carrier must stay untouched"); } },
+      settings: { mutate: () => { throw new Error("legacy carrier must stay untouched"); } },
+    },
+  };
+
+  const response = await wireOf(scopeOf(services)).providers();
+
+  assert.equal(response.result.ok, true);
+  assert.equal(services.calls.providers.length, 1);
+});
+
+test("wireOf reaches namespaces installed as their own remote.<name> services", async () => {
+  const { wireOf } = await loadBundle();
+  const services = modernServices();
+  // A build that installs namespaces as standalone services, not members.
+  services["remote.llm"] = services.remote.llm;
+  services["remote.settings"] = services.remote.settings;
+  services.remote = undefined;
+
+  const response = await wireOf(scopeOf(services)).providers();
+
+  assert.equal(response.result.ok, true);
+  assert.equal(services["remote.llm"] !== undefined && response.result.value.providers.length, 3);
+});
+
+test("wireOf rejects with a named carrier when a host serves neither", async () => {
+  const { wireOf } = await loadBundle();
+  const wire = wireOf(scopeOf({ connection: { api: {} } }));
+
+  await assert.rejects(wire.providers(), /no provider wire/);
+  await assert.rejects(wire.mutate("llm-headers", [], 1), /no settings wire/);
+});
+
+test("providerRowsOf joins the directory with live routes", async () => {
+  const { providerRowsOf } = await loadBundle();
+
+  const rows = providerRowsOf(
+    [{ id: "deepseek", name: "DeepSeek" }, { id: "bare", name: "" }],
+    [{ provider: "deepseek", displayName: "DeepSeek", settingsNs: "llm-deepseek" }],
+  );
+
+  assert.deepEqual(rows, [
+    { provider: "deepseek", displayName: "DeepSeek", settingsNs: "llm-deepseek", active: true },
+    // A live route with no declaration falls back to its id for the name.
+    { provider: "bare", displayName: "bare", settingsNs: "", active: true },
+  ]);
 });
 
 test("the badge still mounts on a host with no settings surface", async () => {
