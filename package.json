@@ -9,7 +9,6 @@
     "./client": "./lib/client.js",
     "./current-time": "./packages/dsh-plugin-current-time/lib/index.js",
     "./llm-headers": "./packages/dsh-plugin-llm-headers/lib/index.js",
-    "./llm-model-listing": "./packages/dsh-plugin-llm-model-listing/lib/index.js",
     "./mcp-console": "./packages/dsh-plugin-mcp-console/lib/index.js",
     "./mcp-console/client": "./packages/dsh-plugin-mcp-console/lib/client.js",
     "./restart": "./packages/dsh-plugin-restart/lib/index.js",
@@ -22,6 +21,7 @@
   "files": [
     "lib",
     "packages",
+    "!packages/dsh-plugin-llm-model-listing",
     "scripts",
     "cordis.patch.yml"
   ],
