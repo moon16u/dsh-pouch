@@ -26,6 +26,7 @@
 | **[`@moon16u/dsh-plugin-web-search-tavily`](./packages/dsh-plugin-web-search-tavily)** | Capability Seam | Real-time web search provider backed by the Tavily REST API, seamlessly integrating with DSH's `ctx.web` capability seam. |
 | **[`@moon16u/dsh-plugin-llm-headers`](./packages/dsh-plugin-llm-headers)** | LLM Seam + Web UI | Provider routes whose request headers are yours to set from `settings.yaml` — including the `User-Agent` the harness reserves for itself: literals, `${env:NAME}` interpolation, per-model overrides, `null` deletion, plus a visual **Request Headers** settings page. Wire up any of pi-ai's 37 built-in providers with headers only. |
 | **[`@moon16u/dsh-plugin-mcp-console`](./packages/dsh-plugin-mcp-console)** | Web UI + Host | MCP server console in the settings page: runtime add/edit/enable/disable/reconnect/delete, per-tool switches, live status over SSE, and mcpServers JSON import. Zero MCP protocol code — everything rides the official `@deepseek-ai/dsh-mcp-client`. Profile-YAML MCP entries are auto-migrated into dynamic management on boot/refresh (and exportable back). |
+| **[`@moon16u/dsh-plugin-llm-model-listing`](./packages/dsh-plugin-llm-model-listing)** | LLM Seam | Makes the Models page's "fetch models" button work against a gateway that serves its model list at another path, in its own response shape — one rule maps the listing URL to the real endpoint and translates the reply. |
 
 ---
 
@@ -86,6 +87,10 @@ dsh plugin --profile web add https://github.com/moon16u/dsh-pouch.git
 ### 6. `@moon16u/dsh-plugin-mcp-console`
 * **Problem**: The official way to attach MCP servers is a static `cordis.patch.yml` entry — no GUI, no runtime changes, and every restart to apply an edit. Declared servers show up as untouchable read-only instances.
 * **Solution**: A full **MCP servers** settings section managing the official `@deepseek-ai/dsh-mcp-client` at runtime: one fiber per server via cordis dynamic assembly (hot edit, no DSH restart), master switches, per-tool enable/disable pills, live status + tool lists over SSE, and mcpServers JSON import. External agents writing MCP entries into `cordis.patch.yml` are handled by an auto-ingest engine: on boot/refresh the entries are migrated into `~/.dsh/dsh-mcp.json` (fiber takeover included, YAML trimmed precisely), reversible via `POST /export-yaml`. Secrets stay masked in every API response.
+
+### 7. `@moon16u/dsh-plugin-llm-model-listing`
+* **Problem**: The Models page's "fetch models" button requests `${baseURL}/models` and reads an OpenAI-shaped reply — one hard-coded path, one hard-coded shape, with no provider setting to redirect either. Gateways whose chat completions work fine but whose model list lives elsewhere can never answer it: Tencent CodeBuddy serves `POST /v2/chat/completions` and returns a hard 404 for `GET /v2/models`, keeping its 28-model list at `GET /v2/enterprises/personal/models` inside a vendor envelope. Every model has to be hand-typed, and re-typed whenever upstream adds one.
+* **Solution**: One rule claims that listing URL. An exact GET on it is served from the rule's real endpoint with the probe's own headers forwarded, and the reply is translated into the four fields the reader wants (`id`, `name`, `context_window`, `max_output_tokens`), with a `modelsPath`, per-field name mapping, and `excludeTags` for the non-chat models a listing still advertises. Everything else passes through untouched — a `registerModelDiscovery` implementation would collide with `dsh-llm-pi-ai`'s (`DUPLICATE_DISCOVERY`) and would cost every catalog route its no-network answer, so the interception is one URL wide. The `fetch` hook chains rather than captures, so it coexists with `llm-headers`.
 
 ---
 

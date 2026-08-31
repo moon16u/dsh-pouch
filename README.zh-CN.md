@@ -26,6 +26,7 @@
 | **[`@moon16u/dsh-plugin-web-search-tavily`](./packages/dsh-plugin-web-search-tavily)** | Capability Seam | 基于 Tavily REST API 的真实网络搜索提供方，无缝接入 DSH 官方 `ctx.web` 网络能力标准。 |
 | **[`@moon16u/dsh-plugin-llm-headers`](./packages/dsh-plugin-llm-headers)** | LLM 接缝 | 请求头由 `settings.yaml` 说了算的供应方路由（含 DSH 保留的 `User-Agent`）：字面量、`${env:NAME}` 插值、按模型覆盖、`null` 删除，pi-ai 自带的 37 个供应方只写 headers 即可接入。 |
 | **[`@moon16u/dsh-plugin-mcp-console`](./packages/dsh-plugin-mcp-console)** | Web UI + Host | 设置页「MCP 服务器」控制台：运行时增删改/启停/重连、工具级开关、SSE 实时状态、mcpServers JSON 导入。零 MCP 协议代码——全部复用官方 `@deepseek-ai/dsh-mcp-client`；profile YAML 里的 MCP 条目在启动/刷新时自动移植为动态管理（可逆回写）。 |
+| **[`@moon16u/dsh-plugin-llm-model-listing`](./packages/dsh-plugin-llm-model-listing)** | LLM Seam | 让模型设置页的「获取模型」按钮能问那些把模型列表放在别的路径、且用自家响应格式的网关——一条规则把列表 URL 映射到真实端点并翻译响应。 |
 
 ---
 
@@ -86,6 +87,10 @@ dsh plugin --profile web add https://github.com/moon16u/dsh-pouch.git
 ### 6. `@moon16u/dsh-plugin-mcp-console`
 * **痛点**：官方接入 MCP 的方式是往 `cordis.patch.yml` 写静态条目——没有 GUI、不能运行时增删改，每次改动都要重启；声明出来的服务器在面板里只能是只读摆设。
 * **方案**：设置页新增完整的**MCP 服务器**管理页，基于 cordis 动态装配运行时编排官方 `@deepseek-ai/dsh-mcp-client`（每台一个 fiber，热更新配置、免重启 DSH）：主开关、工具级启停胶囊、SSE 实时状态与工具列表、mcpServers JSON 一键导入。外部 Agent 写进 `cordis.patch.yml` 的 MCP 条目由 Auto-Ingest 引擎接管：启动/刷新时连根移植进 `~/.dsh/dsh-mcp.json`（含 fiber 接管与条目级 YAML 精确修剪），`POST /export-yaml` 可逆回写。所有 API 响应中的凭据一律打码。
+
+### 7. `@moon16u/dsh-plugin-llm-model-listing`
+* **痛点**：模型设置页的「获取模型」按钮请求 `${baseURL}/models` 并读 OpenAI 形状的响应——路径写死、格式写死，provider 配置里没有任何口子能改。对话接口完全正常、只是把模型列表放在别处的网关永远答不上这个请求：腾讯 CodeBuddy 的 `POST /v2/chat/completions` 可用，`GET /v2/models` 是硬 404，28 个模型的列表在 `GET /v2/enterprises/personal/models`，还裹着自家信封。于是每个模型都得手填，上游一加新模型又得重填。
+* **方案**：一条规则认领那个列表 URL。精确匹配的 GET 由规则指定的真实端点回答（转发探测请求自己的请求头），响应翻译成读取方要的四个字段（`id`、`name`、`context_window`、`max_output_tokens`），并支持 `modelsPath`、逐字段名映射，以及用 `excludeTags` 滤掉列表里那些非对话模型。其余请求原样放行——实现 `registerModelDiscovery` 会与 `dsh-llm-pi-ai` 冲突（`DUPLICATE_DISCOVERY`），还会让所有 catalog 路由失去「完全不走网络」的回答方式，所以拦截范围只有一个 URL 宽。`fetch` hook 采用链式包装而非夺取，与 `llm-headers` 共存。
 
 ---
 
