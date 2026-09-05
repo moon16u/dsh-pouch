@@ -4,3 +4,9 @@ node_modules/
 .env*
 dist/
 coverage/
+
+# llm-model-listing targets one vendor's endpoint and is deliberately local:
+# `private: true` keeps it off npm, root `files` keeps it out of the published
+# tarball, and githooks/dsh-pouch/pre-push refuses any push whose tree carries
+# it. Staying untracked is the layer that keeps it out of history to begin with.
+/packages/dsh-plugin-llm-model-listing/
