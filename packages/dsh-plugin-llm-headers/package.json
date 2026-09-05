@@ -1,6 +1,6 @@
 {
   "name": "@moon16u/dsh-plugin-llm-headers",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Hand-declared pi-ai LLM routes for DeepSeek Harness whose configured request headers reach the wire, including the ones the harness reserves",
   "type": "module",
   "main": "lib/index.js",

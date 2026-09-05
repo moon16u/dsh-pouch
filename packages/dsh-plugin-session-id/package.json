@@ -1,6 +1,6 @@
 {
   "name": "@moon16u/dsh-plugin-session-id",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Show current DSH session ID in the web session header and copy it with one click",
   "type": "module",
   "main": "lib/index.js",

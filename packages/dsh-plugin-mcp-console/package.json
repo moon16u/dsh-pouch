@@ -1,6 +1,6 @@
 {
   "name": "@moon16u/dsh-plugin-mcp-console",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Web GUI console for MCP servers: manages the official @deepseek-ai/dsh-mcp-client at runtime — add/edit/enable/disable/reconnect/delete servers, live status, mcpServers JSON import. No MCP protocol code: connection and tool registration are 100% the official client, resolved from the running DSH profile.",
   "type": "module",
   "main": "lib/index.js",
