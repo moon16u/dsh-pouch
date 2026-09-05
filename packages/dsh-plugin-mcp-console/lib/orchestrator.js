@@ -42,6 +42,12 @@ export const FiberState = {
 /** Official initial sync window (default toolCallTimeoutMs) plus slack. */
 export const CONNECT_GRACE_MS = 75000;
 
+/**
+ * Hard budget for one side-fiber probe (ms). Generous vs the official
+ * initial-sync window: a stdio server may need a cold npx/uvx download.
+ */
+export const PROBE_TIMEOUT_MS = 15000;
+
 /** Error with a stable machine-readable code mapped to an HTTP status. */
 export class ConsoleError extends Error {
   /**
@@ -182,6 +188,15 @@ export class Orchestrator {
   toolsOf(name, currentNames) {
     const current = currentNames ?? this.toolNamesSnapshot();
     const entry = this.ledger.get(name);
+    return this.attributeTools(name, current, entry ? entry.toolNames : new Set());
+  }
+
+  /**
+   * Attribute live tool names to one server from a registry snapshot plus a
+   * load-time diff set (prefix first, then unclaimed diff names). Shared by
+   * the snapshot path and the side-fiber probe, which owns no ledger entry.
+   */
+  attributeTools(name, current, captured) {
     const prefix = `mcp__${name}__`;
     const foreignPrefixes = [];
     for (const other of this.liveServerNames()) {
@@ -193,7 +208,7 @@ export class Orchestrator {
         names.push(toolName);
         continue;
       }
-      if (!entry || !entry.toolNames.has(toolName)) continue;
+      if (!captured.has(toolName)) continue;
       if (foreignPrefixes.some((foreign) => toolName.startsWith(foreign))) continue;
       names.push(toolName);
     }
@@ -443,6 +458,88 @@ export class Orchestrator {
       await this.swapFiber(entry, entry.config);
       this.onChange();
       return { name };
+    });
+  }
+
+  /**
+   * Side-fiber connectivity probe ("Test connection", borrowed from
+   * dsh-skills-mcp-manager): load ONE throwaway official-client fiber with
+   * `failOnStartupError: true`, await its startup handshake, count the tools
+   * it registered, then always dispose it. Zero MCP protocol code — the
+   * handshake itself belongs to the official client, so the console's red
+   * line holds.
+   *
+   * A server whose fiber is currently live cannot be re-probed (the official
+   * client reserves the serverName namespace per module instance); for those
+   * the probe honestly reports the live status instead (`live: true`).
+   *
+   * Serialized through the mutation chain: the probe owns a real fiber and
+   * must never race a load/dispose of the same namespace.
+   *
+   * @param {string} name stored server name
+   * @param {object} [options]
+   * @param {number} [options.timeoutMs] hard probe budget (default 15s)
+   * @returns {Promise<{ok: boolean, live: boolean, toolCount: number, latencyMs: number|null, error: string|null}>}
+   */
+  probe(name, { timeoutMs = PROBE_TIMEOUT_MS } = {}) {
+    return this.run(async () => {
+      const stored = this.storedServers().get(name);
+      if (!stored) throw new ConsoleError("not_found", `unknown server "${name}"`);
+      const { config, error } = validateServerConfig(stored);
+      if (error) {
+        return { ok: false, live: false, toolCount: 0, latencyMs: 0, error };
+      }
+      const entry = this.ledger.get(name);
+      if (entry && entry.fiber && entry.fiber.state !== FiberState.DISPOSED) {
+        // Namespace reserved by the live fiber: report, do not collide.
+        const tools = this.toolsOf(name);
+        const ok = !entry.error && entry.fiber.state === FiberState.ACTIVE && tools.length > 0;
+        return {
+          ok,
+          live: true,
+          toolCount: tools.length,
+          latencyMs: null,
+          error: ok ? null : (entry.error ?? "live but no tools registered"),
+        };
+      }
+      const started = Date.now();
+      let fiber = null;
+      let timer = null;
+      try {
+        if (!this.mcpClient) this.mcpClient = await resolveMcpClient();
+        // force failOnStartupError: the probe must hear about a failed handshake
+        const probeConfig = { ...toClientConfig(config), failOnStartupError: true };
+        const before = this.toolNamesSnapshot();
+        fiber = this.ctx.plugin(this.mcpClient, probeConfig);
+        await new Promise((resolve, reject) => {
+          timer = setTimeout(
+            () => reject(new Error(`probe timed out after ${timeoutMs}ms`)),
+            timeoutMs,
+          );
+          Promise.resolve(fiber).then(resolve, reject);
+        });
+        const after = this.toolNamesSnapshot();
+        const captured = new Set([...after].filter((toolName) => !before.has(toolName)));
+        const toolCount = this.attributeTools(name, after, captured).length;
+        return { ok: true, live: false, toolCount, latencyMs: Date.now() - started, error: null };
+      } catch (probeError) {
+        return {
+          ok: false,
+          live: false,
+          toolCount: 0,
+          latencyMs: Date.now() - started,
+          error: errorMessage(probeError),
+        };
+      } finally {
+        if (timer) clearTimeout(timer);
+        if (fiber && fiber.state !== FiberState.DISPOSED) {
+          try {
+            await fiber.dispose();
+          } catch {
+            // probe already reported; context teardown reaps the rest
+          }
+        }
+      }
     });
   }
 

@@ -19,6 +19,37 @@ test("host entry exports the cordis plugin face", async () => {
   assert.equal(typeof mod.exportStoreToProfileYaml, "function");
 });
 
+test("apply registers a system-prompt announcement behind its own inject scope", async () => {
+  const { apply } = await import("../lib/index.js");
+  const sections = [];
+  const injectedScopes = [];
+  const fakeSystemPromptScope = {
+    systemPrompt: {
+      section: (section) => {
+        sections.push(section);
+        return () => {};
+      },
+    },
+  };
+  const fakeCtx = {
+    // only the systemPrompt scope is activated; the webServer/tools scope
+    // stays dormant, so no store, registry or filesystem is touched
+    inject(names, fn) {
+      injectedScopes.push(names);
+      if (names.includes("systemPrompt")) fn(fakeSystemPromptScope);
+    },
+  };
+  apply(fakeCtx);
+  assert.ok(injectedScopes.some((names) => names.includes("systemPrompt")));
+  assert.equal(sections.length, 1);
+  assert.equal(sections[0].name, "plugin:mcp-console");
+  assert.ok(Number.isFinite(sections[0].order));
+  // the guidance tells the model where the console lives and what it does
+  assert.match(sections[0].text, /MCP 服务器/);
+  assert.match(sections[0].text, /mcp__/);
+  assert.match(sections[0].text, /dsh-mcp\.json/);
+});
+
 test("client bundle is a ModuleLoader payload registering the settings section", async () => {
   const source = await readFile(join(root, "lib/client.js"), "utf8");
   assert.match(source, /window\.__ModuleLoader__\.load\(\{/);
@@ -39,6 +70,19 @@ test("client bundle is a ModuleLoader payload registering the settings section",
   assert.doesNotMatch(source, /mcp-mgr-edit/);
   assert.match(source, /profileReadOnly/);
   assert.match(source, /externalServers/);
+  // side-fiber probe (borrowed from dsh-skills-mcp-manager): test button,
+  // per-card result line, probe API call
+  assert.match(source, /IconLinkOutline16/);
+  assert.match(source, /\/probe/);
+  assert.match(source, /probeOk/);
+  assert.match(source, /probeLiveOk/);
+  assert.match(source, /mcp-probe/);
+  // settings-GUI card (settings.plugin.item keyed "mcp-console"): the plugins
+  // tab pairs the host-registered namespace with this browser-side card
+  assert.match(source, /settings\.plugin\.item/);
+  assert.match(source, /McpPluginCard/);
+  assert.match(source, /mcp-plugin-card/);
+  assert.match(source, /namespace: "mcp-console"/);
   // the old session-header pill must not come back
   assert.doesNotMatch(source, /conversation\.session\.header\.utilities/);
   assert.doesNotMatch(source, /react-dom/);

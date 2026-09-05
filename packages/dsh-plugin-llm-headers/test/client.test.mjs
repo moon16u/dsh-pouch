@@ -86,7 +86,19 @@ function contextStub(services) {
 function settingsServices() {
   return {
     connection: { api: {} },
-    settingsScope: { describe: () => ({ getSnapshot: () => ({ status: "idle", view: undefined, error: null }) }) },
+    remote: { llm: {}, settings: {} },
+    "remote.llm": {},
+    "remote.settings": {},
+    settingsScope: {
+      describe: () => ({ getSnapshot: () => ({ status: "idle", view: undefined, error: null }) }),
+      // the mcp-console card binds its own namespace off the same service
+      bind: () => ({
+        getSnapshot: () => ({ status: "loading" }),
+        subscribe: () => () => {},
+        set: () => Promise.resolve(),
+        unset: () => Promise.resolve(),
+      }),
+    },
     settingsSchema: { getPath: () => undefined },
   };
 }
@@ -150,11 +162,13 @@ test("apply registers the headers section beside the session-id badge", async ()
 
   bundle.apply(scope);
 
-  const slots = registered.map((entry) => `${entry.name}#${entry.id}`);
+  // keyed slots (the plugins-page card) identify by key, list slots by id
+  const slots = registered.map((entry) => `${entry.name}#${entry.id ?? entry.key}`);
   assert.deepEqual(slots, [
     "conversation.session.header.utilities#dsh-session-id",
     "settings.section#llm-headers",
     "settings.section#mcp-console",
+    "settings.plugin.item#mcp-console",
   ]);
   assert.deepEqual(dictionaries, ["session-id", "llm-headers", "mcp-console"]);
 

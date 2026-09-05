@@ -12,6 +12,7 @@
  * | POST   | /servers/:name/enable       | enable + assemble                  |
  * | POST   | /servers/:name/disable      | dispose (config kept)              |
  * | POST   | /servers/:name/reconnect    | fiber.restart()                    |
+ * | POST   | /servers/:name/probe        | side-fiber connectivity test       |
  * | POST   | /import                     | mcpServers JSON import             |
  * | GET    | /events                     | SSE status stream                  |
  * | GET    | /config                     | UI config (non-secret)             |
@@ -20,6 +21,10 @@
  * Loopback fence: every mutating and secret-bearing route answers 403 to
  * non-loopback callers; GET /config (UI placement only) is open so a LAN
  * browser can at least read placement while the data routes stay local.
+ * "Loopback" is four checks at once (hardened after dsh-skills-mcp-manager):
+ * a loopback socket peer, a Host header naming a loopback origin (DNS
+ * rebinding fence), no `sec-fetch-site: cross-site` browser marker, and —
+ * when an Origin header is present — an Origin matching the Host.
  */
 import { computeSnapshot } from "./status.js";
 import { ConsoleError } from "./orchestrator.js";
@@ -35,6 +40,9 @@ const STATUS_BY_CODE = { invalid: 400, conflict: 409, not_found: 404, internal: 
 
 const LOOPBACK_ADDRESSES = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
 
+/** Host header hostnames accepted as loopback (IPv6 keeps its brackets). */
+const LOOPBACK_HOSTNAMES = new Set(["127.0.0.1", "localhost", "[::1]"]);
+
 /**
  * Register the API on the webserver.
  *
@@ -42,9 +50,11 @@ const LOOPBACK_ADDRESSES = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
  * @param {object} services
  * @param {import("./orchestrator.js").Orchestrator} services.orchestrator
  * @param {import("./store.js").Store} services.uiStore store holding the `ui` section
+ * @param {() => {enabled: boolean, announceToAgent: boolean}} [services.getPluginConfig]
+ *        resolved master switches (settings-GUI backed), surfaced in /health
  * @returns {{ dispose: () => void, notify: () => void }} route handle
  */
-export function registerRoutes(ctx, { orchestrator, uiStore }) {
+export function registerRoutes(ctx, { orchestrator, uiStore, getPluginConfig }) {
   const sseClients = new Set();
   let heartbeat = null;
   let notifyTimer = null;
@@ -120,6 +130,7 @@ export function registerRoutes(ctx, { orchestrator, uiStore }) {
       respond(res, 200, {
         ok: true,
         plugin: "mcp-console",
+        config: getPluginConfig ? getPluginConfig() : null,
         globalStore: orchestrator.globalStore.path,
         projectStore: orchestrator.projectStore?.path ?? null,
         managed: [...orchestrator.ledger.keys()].sort(),
@@ -219,6 +230,7 @@ export function registerRoutes(ctx, { orchestrator, uiStore }) {
     if (action === "enable") respond(res, 200, await orchestrator.setEnabled(name, true));
     else if (action === "disable") respond(res, 200, await orchestrator.setEnabled(name, false));
     else if (action === "reconnect") respond(res, 200, await orchestrator.reconnect(name));
+    else if (action === "probe") respond(res, 200, await orchestrator.probe(name));
     else respond(res, 404, { error: { code: "not_found", message: `unknown action "${action}"` } });
   }
 
@@ -256,9 +268,43 @@ export function registerRoutes(ctx, { orchestrator, uiStore }) {
   return { dispose, notify };
 }
 
-function isLoopback(req) {
+/**
+ * Loopback fence, four layers deep (borrowed from dsh-skills-mcp-manager):
+ *  1. the socket peer is a loopback address;
+ *  2. the Host header names a loopback origin — a DNS-rebindable name
+ *     (e.g. attacker.example) resolves publicly but the browser sends it in
+ *     Host; rejecting non-loopback Hosts closes that hole;
+ *  3. no `sec-fetch-site: cross-site` marker (browsers always send it on
+ *     cross-site fetches; non-browser clients simply omit it);
+ *  4. when an Origin is present it must match the Host (same-origin) —
+ *     Origin-less clients (curl, EventSource in older stacks) pass.
+ *
+ * @param {import("node:http").IncomingMessage} req
+ */
+export function isLoopback(req) {
   const address = req?.socket?.remoteAddress;
-  return typeof address === "string" && LOOPBACK_ADDRESSES.has(address);
+  if (typeof address !== "string" || !LOOPBACK_ADDRESSES.has(address)) return false;
+  const host = req?.headers?.host;
+  if (typeof host !== "string" || host.length === 0) return false;
+  let hostUrl;
+  try {
+    hostUrl = new URL(`http://${host}`);
+  } catch {
+    return false;
+  }
+  if (!LOOPBACK_HOSTNAMES.has(hostUrl.hostname)) return false;
+  if (req.headers["sec-fetch-site"] === "cross-site") return false;
+  const origin = req.headers.origin;
+  if (origin !== undefined) {
+    let originUrl;
+    try {
+      originUrl = new URL(origin);
+    } catch {
+      return false;
+    }
+    if (originUrl.host !== hostUrl.host) return false;
+  }
+  return true;
 }
 
 function respond(res, status, body) {
