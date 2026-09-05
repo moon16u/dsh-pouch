@@ -247,11 +247,34 @@ test("global fetch hook forces user-agent on requests matching route baseURL", a
   ]);
 
   const res = await fetch(`${endpoint.baseURL}/chat/completions`, {
-    headers: { "user-agent": "deepseek-harness/0.1.1", authorization: "Bearer direct-key" },
+    headers: { "user-agent": "deepseek-harness/0.1.2-rc.1", authorization: "Bearer direct-key" },
   });
   await res.text();
 
   assert.equal(endpoint.requests.length, 1);
   assert.equal(endpoint.requests[0].headers["user-agent"], CODEBUDDY_UA);
   assert.equal(endpoint.requests[0].headers["authorization"], "Bearer direct-key");
+});
+
+test("global fetch hook prefers a matching model rule over the route rule", async (t) => {
+  const endpoint = await recordingEndpoint();
+  t.after(() => endpoint.close());
+
+  const { installGlobalFetchHook, setFetchHeaderRules } = await import("../lib/index.js");
+  installGlobalFetchHook();
+  setFetchHeaderRules([
+    { prefix: endpoint.baseURL, headers: { "x-tier": "shared" } },
+    { prefix: endpoint.baseURL, modelId: "special-model", headers: { "x-tier": "dedicated" } },
+  ]);
+
+  const request = (model) => fetch(`${endpoint.baseURL}/chat/completions`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-tier": "upstream" },
+    body: JSON.stringify({ model }),
+  });
+  await (await request("special-model")).text();
+  await (await request("other-model")).text();
+
+  assert.equal(endpoint.requests[0].headers["x-tier"], "dedicated");
+  assert.equal(endpoint.requests[1].headers["x-tier"], "shared");
 });

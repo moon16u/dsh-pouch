@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { Config, headerForcingProvider, name, overrideHeaders, resolveProfile } from "../lib/index.js";
 
 const CODEBUDDY_UA = "CLI/unknown CodeBuddy/2.137.1";
-const HARNESS_UA = "deepseek-harness/0.1.1-rc.2 (+https://github.com/deepseek-ai/deepseek-harness)";
+const HARNESS_UA = "deepseek-harness/0.1.2-rc.1 (+https://github.com/deepseek-ai/deepseek-harness)";
 
 /** Stand-in for the launcher's environment snapshot. */
 function env(vars = {}) {

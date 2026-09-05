@@ -3,7 +3,6 @@ import { credentialRef } from "@deepseek-ai/dsh-credentials";
 import { launchEnvironmentOf } from "@deepseek-ai/dsh-launch-environment";
 import { LlmError, assertUsableApiKey, attributionHeaders, resolveRetryPolicy } from "@deepseek-ai/dsh-llm";
 import { PiAiAdapter } from "@deepseek-ai/dsh-llm-pi-ai";
-import { installSettingsSection, settingsNamespace } from "@deepseek-ai/dsh-settings";
 import { createProvider } from "@earendil-works/pi-ai";
 import { builtinProviders, getBuiltinModels } from "@earendil-works/pi-ai/providers/all";
 import { anthropicMessagesApi } from "@earendil-works/pi-ai/api/anthropic-messages.lazy";
@@ -13,7 +12,37 @@ import { openAIResponsesApi } from "@earendil-works/pi-ai/api/openai-responses.l
 export const name = "llm-headers";
 export const inject = ["llm", "settings"];
 
-export const LLM_HEADERS_SETTINGS_NAMESPACE = settingsNamespace("llm-headers");
+export const LLM_HEADERS_SETTINGS_NAMESPACE = "llm-headers";
+
+/**
+ * Register this optional settings consumer on both the current provider API
+ * and the pre-0.1.2 `register` surface used by older hosts/tests.
+ */
+function installSettingsSection(ctx, ns, schema, entry, hooks) {
+  ctx.inject(["settings"], (settingsCtx) => {
+    const settings = settingsCtx.settings;
+    if (typeof settings?.installSection === "function") {
+      settings.installSection(ctx, ns, schema, entry, hooks);
+      return;
+    }
+    if (typeof settings?.register !== "function") return;
+    const scope = settings.register(ns, schema, {
+      base: entry,
+      ...(hooks.validate === void 0 ? {} : { validate: hooks.validate }),
+    });
+    hooks.setSource(() => scope.get());
+    settingsCtx.effect?.(() => () => {
+      if (ctx.fiber?.state === 4 || ctx.fiber?.state === 5) return;
+      hooks.setSource(() => entry);
+      hooks.onChange();
+    });
+    hooks.onChange();
+    scope.watch(() => {
+      if (ctx.fiber?.state === 4 || ctx.fiber?.state === 5) return;
+      hooks.onChange();
+    });
+  });
+}
 
 /**
  * Wire protocols a route may name when pi-ai's catalog does not already
@@ -245,6 +274,7 @@ export function headerForcingProvider(base, headers) {
   };
   return {
     ...base,
+    __dshLlmHeadersForcing__: true,
     stream: (model, context, options) => base.stream(model, context, force(model, options)),
     streamSimple: (model, context, options) => base.streamSimple(model, context, force(model, options)),
   };
@@ -530,16 +560,34 @@ export function setFetchHeaderRules(rules) {
   activeRules = rules;
 }
 
-export function matchFetchHeaderOverrides(urlStr) {
+function modelIdFromFetchRequest(input, init) {
+  const body = init?.body ?? (input && typeof input === "object" ? input.body : void 0);
+  if (typeof body !== "string") return void 0;
+  try {
+    const parsed = JSON.parse(body);
+    return typeof parsed?.model === "string" ? parsed.model : void 0;
+  } catch {
+    return void 0;
+  }
+}
+
+export function matchFetchHeaderOverrides(urlStr, input, init) {
   if (!urlStr || typeof urlStr !== "string") return undefined;
+  const modelId = modelIdFromFetchRequest(input, init);
+  const matching = [];
   for (const rule of activeRules) {
     if (rule.prefix) {
       if (urlStr === rule.prefix || urlStr.startsWith(rule.prefix + "/") || urlStr.startsWith(rule.prefix + "?")) {
-        return rule.headers;
+        matching.push(rule);
       }
     }
   }
-  return undefined;
+  if (matching.length === 0) return undefined;
+  if (modelId !== void 0) {
+    const modelRule = matching.find((rule) => rule.modelId === modelId);
+    if (modelRule) return modelRule.headers;
+  }
+  return matching.find((rule) => rule.modelId === void 0)?.headers;
 }
 
 export function applyFetchHeaderOverrides(input, init, overrides) {
@@ -573,7 +621,7 @@ export function installGlobalFetchHook() {
     else if (input && typeof input === "object" && typeof input.url === "string") urlStr = input.url;
 
     if (urlStr) {
-      const overrides = matchFetchHeaderOverrides(urlStr);
+      const overrides = matchFetchHeaderOverrides(urlStr, input, init);
       if (overrides && Object.keys(overrides).length > 0) {
         init = applyFetchHeaderOverrides(input, init, overrides);
       }
@@ -661,9 +709,9 @@ if (typeof PiAiAdapter?.prototype?.streamWithSnapshot === "function" && !PiAiAda
     try {
       const profile = this.profileOf(snapshot, options?.provider);
       const baseUrl = profile?.baseURL ?? profile?.piProvider?.baseUrl;
-      if (baseUrl && profile?.headers && Object.keys(profile.headers).length > 0) {
+      if (baseUrl && profile?.headers && Object.keys(profile.headers).length > 0 && !profile?.piProvider?.__dshLlmHeadersForcing__) {
         const normalized = String(baseUrl).replace(/\/+$/, "");
-        const existing = activeRules.find((r) => r.prefix === normalized);
+        const existing = activeRules.find((r) => r.prefix === normalized && r.modelId === void 0);
         if (!existing) {
           activeRules.push({ prefix: normalized, headers: profile.headers });
         } else {

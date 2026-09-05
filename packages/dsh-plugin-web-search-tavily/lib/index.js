@@ -1,6 +1,5 @@
 import z from "@deepseek-ai/schemastery";
 import { credentialRef } from "@deepseek-ai/dsh-credentials";
-import { installSettingsSection, settingsNamespace } from "@deepseek-ai/dsh-settings";
 import { launchEnvironmentOf } from "@deepseek-ai/dsh-launch-environment";
 import { WebError } from "@deepseek-ai/dsh-web";
 
@@ -10,7 +9,7 @@ const DEFAULT_API_KEY_ENV = "TAVILY_API_KEY";
 const FALLBACK_API_KEY_ENV = credentialRef("DEEPSEEK_API_KEY");
 const DEFAULT_SEARCH_DEPTH = "basic";
 const DEFAULT_MAX_RESULTS = 5;
-const USER_AGENT = "deepseek-harness/0.1.1 (tavily web search provider)";
+const USER_AGENT = "deepseek-harness/0.1.2-rc.1 (tavily web search provider)";
 
 const name = "web-search-tavily";
 const inject = ["web"];
@@ -24,7 +23,34 @@ const Config = z.object({
 });
 
 const SEARCH_BASE_URL_ENV = "TAVILY_SEARCH_BASE_URL";
-const WEB_SEARCH_TAVILY_SETTINGS_NAMESPACE = settingsNamespace("web-search-tavily");
+const WEB_SEARCH_TAVILY_SETTINGS_NAMESPACE = "web-search-tavily";
+
+/** Register the settings consumer against both DSH settings generations. */
+function installSettingsSection(ctx, ns, schema, entry, hooks) {
+  ctx.inject(["settings"], (settingsCtx) => {
+    const settings = settingsCtx.settings;
+    if (typeof settings?.installSection === "function") {
+      settings.installSection(ctx, ns, schema, entry, hooks);
+      return;
+    }
+    if (typeof settings?.register !== "function") return;
+    const scope = settings.register(ns, schema, {
+      base: entry,
+      ...(hooks.validate === void 0 ? {} : { validate: hooks.validate }),
+    });
+    hooks.setSource(() => scope.get());
+    settingsCtx.effect?.(() => () => {
+      if (ctx.fiber?.state === 4 || ctx.fiber?.state === 5) return;
+      hooks.setSource(() => entry);
+      hooks.onChange();
+    });
+    hooks.onChange();
+    scope.watch(() => {
+      if (ctx.fiber?.state === 4 || ctx.fiber?.state === 5) return;
+      hooks.onChange();
+    });
+  });
+}
 
 function resolveOptions(ctx, config) {
   const apiKeyEnv = credentialRef(config.apiKeyEnv ?? DEFAULT_API_KEY_ENV);

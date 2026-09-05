@@ -8,7 +8,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![npm](https://img.shields.io/npm/v/@moon16u/dsh-pouch.svg?color=cb3837)](https://www.npmjs.com/package/@moon16u/dsh-pouch)
-[![DeepSeek Harness](https://img.shields.io/badge/DSH-0.1.1--rc.2%20%7C%200.1.2--alpha.1-purple.svg)](https://github.com/deepseek-ai/deepseek-harness)
+[![DeepSeek Harness](https://img.shields.io/badge/DSH-0.1.1--rc.2%20%7C%200.1.2--rc.1-purple.svg)](https://github.com/deepseek-ai/deepseek-harness)
 [![pnpm workspace](https://img.shields.io/badge/pnpm-workspace-orange.svg)](https://pnpm.io/workspaces)
 
 > **dsh-pouch** 是一个专为 [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) 打造的实用小插件工具箱（Pouch Toolkit）。  
@@ -82,7 +82,7 @@ dsh plugin --profile web add https://github.com/moon16u/dsh-pouch.git
 ### 5. `@moon16u/dsh-plugin-llm-headers`
 * **痛点**：DSH 在每个供应方请求上最后合入自己的 attribution `User-Agent`，`llm-pi-ai` 里的 `headers` 无法覆盖这个保留名。按客户端标识鉴权的网关——腾讯 CodeBuddy 会返回 `500 {"code":11128,"msg":"request illegal"}`——单靠配置无法接入。
 * **方案**：用自己的 `llm-headers` 段落声明路由，仍交给官方 `PiAiAdapter` 承载，只把 pi-ai provider 包了一层，让配置的请求头在进入 socket 前拿到最后一次写权。另附一个**请求头**设置页（独立左侧栏入口）——官方提供方卡片没有对外 slot，且写进 `llm-pi-ai` 的请求头本就会被剥掉。包 provider 而不是协议对象，是为了让 pi-ai 自带的路由保留自己的 API 实现——这类路由两行就能接。未配置 headers 的路由照常发送 DSH attribution，且拒绝删除它。
-* **版本跨度**：设置页通过双代线缆读取提供方目录并写入设置——DSH 0.1.1 的 `connection.api`（APIProxy）或 0.1.2 的 `remote.llm` / `remote.settings` 命名空间——宿主提供哪个就用哪个。
+* **版本跨度**：设置页通过双代线缆读取提供方目录并写入设置——DSH 0.1.1 的 `connection.api`（APIProxy）或 DSH 0.1.2-rc.1 的 `remote.llm` / `remote.settings` 命名空间——宿主提供哪个就用哪个。
 
 ### 6. `@moon16u/dsh-plugin-mcp-console`
 * **痛点**：官方接入 MCP 的方式是往 `cordis.patch.yml` 写静态条目——没有 GUI、不能运行时增删改，每次改动都要重启；声明出来的服务器在面板里只能是只读摆设。

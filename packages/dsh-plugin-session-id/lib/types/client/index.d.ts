@@ -1,7 +1,8 @@
 import type { PropsLocale, PropsRuntime } from "@deepseek-ai/dsh-client-ui-slots";
+import type { Context as ClientContext } from "@deepseek-ai/cordis";
 
 export declare const inject: string[];
-export declare function apply(ctx: import("@deepseek-ai/dsh-client-runtime/client").ClientContext): void;
+export declare function apply(ctx: ClientContext): void;
 
 export interface SessionIdActionProps extends PropsRuntime<"conversation.session.header.utilities">, PropsLocale<typeof import("./locales").NS> {}
 
