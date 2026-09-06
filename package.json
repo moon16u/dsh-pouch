@@ -1,6 +1,6 @@
 {
   "name": "@moon16u/dsh-pouch",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "A collection of small, beautiful, and practical plugins for DeepSeek Harness (DSH)",
   "type": "module",
   "main": "./lib/index.js",
@@ -21,6 +21,7 @@
   "files": [
     "lib",
     "packages",
+    "!packages/**/node_modules",
     "!packages/dsh-plugin-llm-model-listing",
     "scripts",
     "cordis.patch.yml"
