@@ -8,9 +8,9 @@
 # which leaves the conversation stuck / unresponsive.
 #
 # Correct usage:
-#   1. In a normal terminal OUTSIDE DSH:
-#        bash ~/dsh-pouch/scripts/dsh-restart.sh          # prod
-#        bash ~/dsh-pouch/scripts/dsh-restart.sh dev      # dev
+#   1. In a normal terminal OUTSIDE DSH, from the dsh-pouch repo root:
+#        bash packages/dsh-plugin-restart/scripts/dsh-restart.sh       # prod
+#        bash packages/dsh-plugin-restart/scripts/dsh-restart.sh dev   # dev
 #   2. From inside DSH, use the safe interfaces instead:
 #        /dsh-restart                     (command, fixed 3s delay)
 #        dsh_restart                      (agent tool, fixed 3s delay)
@@ -18,7 +18,7 @@
 #      DSH shell marker so it runs as an external command (add a delay so the
 #      tool result can be saved first):
 #        env -u DSH_SHELL DSH_RESTART_ALLOWED=1 \
-#          bash ~/dsh-pouch/scripts/dsh-restart.sh --delay 3000
+#          bash packages/dsh-plugin-restart/scripts/dsh-restart.sh --delay 3000
 #
 # The first invocation spawns a detached worker (setsid + nohup) and returns
 # immediately. The worker performs the kill/start sequence and writes progress
@@ -242,7 +242,10 @@ fi
 # Make Node's built-in fetch honor HTTP(S)_PROXY/NO_PROXY. This is required
 # for providers such as Google Gemini that are only reachable through the
 # local proxy (e.g. 127.0.0.1:10808). Node's fetch does not read proxy env
-# vars unless --use-env-proxy is enabled.
+# vars unless --use-env-proxy is enabled. NODE_USE_ENV_PROXY is the primary
+# switch: VS Code deletes NODE_OPTIONS from every child environment it spawns,
+# so a dsh started by the IDE extension only inherits the plain variable.
+export NODE_USE_ENV_PROXY=1
 if [[ -z "${NODE_OPTIONS:-}" ]]; then
   export NODE_OPTIONS="--use-env-proxy"
 else
@@ -252,7 +255,7 @@ else
   esac
 fi
 
-echo "starting DSH ($MODE)  NODE_OPTIONS=$NODE_OPTIONS"
+echo "starting DSH ($MODE)  NODE_USE_ENV_PROXY=$NODE_USE_ENV_PROXY  NODE_OPTIONS=$NODE_OPTIONS"
 DSH_EXEC="${DSH_BIN:-$(which dsh 2>/dev/null || echo "$HOME/node/bin/dsh")}"
 if [[ "$MODE" == "dev" ]]; then
   cd "${DSH_WORKSPACE:-$PWD}"
@@ -283,7 +286,11 @@ for _ in $(seq 1 60); do
   if ! kill -0 "$NEW_PID" 2>/dev/null; then
     serve_error_page_and_fail "新进程启动即退出 (new DSH process exited during startup)"
   fi
-  if curl -fsS -o /dev/null "http://127.0.0.1:$PORT/" 2>/dev/null; then
+  # Readiness probe WITHOUT -f, same as the two probes above: DSH answers 401
+  # on / until the browser presents a launch token, and -f scores that as a
+  # failure — the full 30s wait would then expire against a healthy server and
+  # the success path below (which clears restart-failed.json) would never run.
+  if curl -sS -o /dev/null -m 2 "http://127.0.0.1:$PORT/" 2>/dev/null; then
     echo "DSH is up at http://127.0.0.1:$PORT/"
     # Restart succeeded: clear the failure marker so the plugin does not
     # report a stale failure on this boot.

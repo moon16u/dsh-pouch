@@ -1,7 +1,7 @@
 @echo off
 setlocal
 title DSH Start
-wsl.exe --cd ~ bash -lc "cd 'Agent YueJian/dsh-pouch/scripts' && exec ./dsh-start.sh"
+wsl.exe -e bash -lc "cd \"$(wslpath -u '%~dp0')\" && exec ./dsh-start.sh"
 set "exit_code=%errorlevel%"
 echo.
 pause
