@@ -11,6 +11,11 @@ coverage/
 # it. Staying untracked is the layer that keeps it out of history to begin with.
 /packages/dsh-plugin-llm-model-listing/
 
+# core-memory mirrors one specific workspace's memory/core layout — it is the
+# DSH twin of that workspace's shell-side inject_core.sh hook, useless anywhere
+# else. Same three-layer local-only treatment as llm-model-listing.
+/packages/dsh-plugin-core-memory/
+
 # Local-only READMEs: the tracked pair plus the local-only plugin. The tracked
 # pair is what GitHub and npm render, so it must never name a package the
 # reader cannot install. `LOCAL-README*` and not `README.local*` because npm

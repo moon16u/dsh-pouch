@@ -23,6 +23,7 @@
     "packages",
     "!packages/**/node_modules",
     "!packages/dsh-plugin-llm-model-listing",
+    "!packages/dsh-plugin-core-memory",
     "scripts",
     "cordis.patch.yml"
   ],
