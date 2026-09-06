@@ -10,3 +10,13 @@ coverage/
 # tarball, and githooks/dsh-pouch/pre-push refuses any push whose tree carries
 # it. Staying untracked is the layer that keeps it out of history to begin with.
 /packages/dsh-plugin-llm-model-listing/
+
+# Local-only READMEs: the tracked pair plus the local-only plugin. The tracked
+# pair is what GitHub and npm render, so it must never name a package the
+# reader cannot install. `LOCAL-README*` and not `README.local*` because npm
+# force-includes any root README* file — .npmignore and `files` negations both
+# lose to it (verified with `npm pack --dry-run`). The two copies are kept in
+# sync by hand: when the tracked pair changes, copy it over and re-apply the
+# local-only sections.
+/LOCAL-README.md
+/LOCAL-README.zh-CN.md

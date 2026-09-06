@@ -1,5 +1,10 @@
 # stray runtime logs (npm's ignore globs are shallow — name them)
 scripts/dsh-restart.sh.schedule.log
+# Local-only READMEs: they describe the never-published local plugin. `files`
+# already omits them and the `LOCAL-README*` name keeps npm's "always ship
+# README*" rule out of play, so this is the third layer, not the only one.
+LOCAL-README.md
+LOCAL-README.zh-CN.md
 *.log
 .DS_Store
 .env*
