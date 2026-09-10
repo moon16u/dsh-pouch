@@ -343,9 +343,18 @@ export async function ingestProfileMcpEntries({ store, yamlPath }) {
     if (removedRanges.has(index)) continue;
     kept.push(lines[index]);
   }
-  // trim: collapse the blank-line runs left by removals inside the document
-  const cleaned = kept.join("\n").replace(/\n{3,}/g, "\n\n");
-  writeFileSync(targetPath, cleaned.endsWith("\n") ? cleaned : cleaned + "\n", "utf8");
+  // trim: collapse the blank-line runs left by removals inside the document.
+  // A patch layer must remain a top-level YAML array: when the trim removes
+  // the last list item (comment-only remainder), append an explicit `[]` so
+  // dsh-app-boot's parsePatchList (which rejects a non-array document) does
+  // not crash the next boot. Only a column-0 `- ` counts: nested lines and
+  // indented scalars are not top-level items.
+  const hasTopLevelItem = kept.some((line) => /^-\s/.test(line));
+  const cleaned = kept.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd();
+  const output = hasTopLevelItem
+    ? cleaned + "\n"
+    : (cleaned.length > 0 ? cleaned + "\n\n" : "") + "[]\n";
+  writeFileSync(targetPath, output, "utf8");
 
   return { ingested, skipped, cleanedYaml: true };
 }

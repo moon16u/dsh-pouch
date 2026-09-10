@@ -150,6 +150,30 @@ function invalid(provider, message) {
 }
 
 /**
+ * A deep, mutable copy of one configured route, made of plain data only.
+ *
+ * The settings provider hands out `deepFreeze`d sections, but schemastery's
+ * `resolve()` writes resolved defaults in place — into nested maps as well as
+ * the top level (it fills a route's `headers` object, among others). Copying
+ * gives the schema somewhere to write without touching, or silently unfreezing,
+ * the stored document. Values that are not plain JSON-ish data are passed
+ * through by reference, because only plain containers are ever schema targets
+ * and cloning an exotic object would change its identity.
+ *
+ * @param value - a route profile as read from settings.
+ * @returns a mutable deep copy of its plain objects and arrays.
+ */
+function plainObject(value) {
+  if (Array.isArray(value)) return value.map(plainObject);
+  if (value === null || typeof value !== "object") return value;
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) return value;
+  const copy = {};
+  for (const [key, entry] of Object.entries(value)) copy[key] = plainObject(entry);
+  return copy;
+}
+
+/**
  * Resolve a configured header map into literals, keeping `null` as the removal
  * marker.
  *
@@ -522,7 +546,16 @@ function buildProvider(provider, profile, displayName, models) {
  * @returns a resolved profile shaped for `PiAiAdapter`.
  */
 export function resolveProfile(provider, source, env) {
-  const profile = providerProfile(source);
+  // schemastery's `resolve()` writes defaults into the object it validates, and
+  // `dsh-settings` publishes every resolved section `deepFreeze`d — so running
+  // `providerProfile()` directly on the section read through `scope.get()`
+  // throws `Cannot assign to read only property '<field>'`. That failure is then
+  // swallowed per route in `resolveProfiles()`, which is the worst possible
+  // shape: the route silently serves nothing, no adapter registers, and nothing
+  // is logged. Validate a mutable shallow copy instead. Shallow is enough —
+  // schemastery writes defaults on the object it is handed, and `routeModels()`
+  // already copies every nested value it keeps (models, header maps, compat).
+  const profile = providerProfile(plainObject(source));
   const displayName = profile.displayName ?? provider;
   if (profile.api !== void 0 && PROTOCOLS[profile.api] === void 0) {
     invalid(provider, `names api "${profile.api}"; supported protocols are ${Object.keys(PROTOCOLS).join(", ")}`);
@@ -546,6 +579,16 @@ export function resolveProfile(provider, source, env) {
     requestImageMaxBytes: DEFAULT_REQUEST_IMAGE_MAX_BYTES,
     retryPolicy: resolveRetryPolicy(void 0, `${name}: provider "${provider}" retryPolicy`),
     configuredMaxTokens,
+    // dsh-llm-pi-ai >= 0.1.5 reads this unconditionally in `PiAiAdapter.modelOf`
+    // (`profile.modelErrors.get(model)`, resolver at lib/index.js:1769) to turn a
+    // per-model configuration failure into an `INVALID_CONFIG` diagnostic. Older
+    // adapters have no such field, so an empty map is the honest universal value:
+    // a route reaching this line has already passed every model-level check —
+    // `routeModels()` throws out of `resolveProfile()` on the first bad entry, and
+    // `resolveProfiles()` drops that whole route. Empty therefore means exactly
+    // what the pre-0.1.5 absence of the field meant: no model is individually
+    // broken. It must be a real Map; `undefined` throws at the call site.
+    modelErrors: new Map(),
     // The headers reach the wire from here, not from `profile.headers`: the
     // adapter runs that field through `requestHeaders()`, which is exactly what
     // this plugin exists to outrank. The field above is still set so a reader

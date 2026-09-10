@@ -1,7 +1,7 @@
 {
   "name": "@moon16u/dsh-plugin-mcp-console",
-  "version": "0.2.0",
-  "description": "Web GUI console for MCP servers: manages the official @deepseek-ai/dsh-mcp-client at runtime — add/edit/enable/disable/reconnect/delete servers, live status, mcpServers JSON import. No MCP protocol code: connection and tool registration are 100% the official client, resolved from the running DSH profile.",
+  "version": "0.2.1",
+  "description": "Web GUI console for MCP servers: manages the official @deepseek-ai/dsh-mcp-client at runtime \u2014 add/edit/enable/disable/reconnect/delete servers, live status, mcpServers JSON import. No MCP protocol code: connection and tool registration are 100% the official client, resolved from the running DSH profile.",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
@@ -36,10 +36,10 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.2",
-    "@deepseek-ai/dsh-mcp-client": "^0.1.2-rc.1",
-    "@deepseek-ai/dsh-host-webserver": "^0.1.2-rc.1",
-    "@deepseek-ai/dsh-settings": "^0.1.2-rc.1",
-    "@deepseek-ai/dsh-tools": "^0.1.2-rc.1",
+    "@deepseek-ai/dsh-mcp-client": "^0.1.5-rc.1",
+    "@deepseek-ai/dsh-host-webserver": "^0.1.5-rc.1",
+    "@deepseek-ai/dsh-settings": "^0.1.5-rc.1",
+    "@deepseek-ai/dsh-tools": "^0.1.5-rc.1",
     "@deepseek-ai/schemastery": "^3.18.2"
   },
   "peerDependenciesMeta": {
@@ -67,5 +67,9 @@
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
+  },
+  "devDependencies": {
+    "react": "18.2.0",
+    "react-dom": "18.2.0"
   }
 }

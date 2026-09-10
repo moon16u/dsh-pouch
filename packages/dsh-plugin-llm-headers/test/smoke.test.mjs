@@ -11,6 +11,21 @@ function env(vars = {}) {
   return { get: (variable) => (variable in vars ? { value: vars[variable] } : void 0) };
 }
 
+/**
+ * Reproduce `dsh-settings`' `deepFreeze` on a resolved section.
+ *
+ * The settings provider freezes every object it publishes, and schemastery's
+ * `resolve()` defaults are written in place — so a route read from a real
+ * provider is frozen, while every hand-written fixture here is not.
+ */
+function deepFreeze(value, seen = new WeakSet()) {
+  if (value === null || typeof value !== "object" || seen.has(value)) return value;
+  seen.add(value);
+  Object.freeze(value);
+  for (const key of Object.keys(value)) deepFreeze(value[key], seen);
+  return value;
+}
+
 function codebuddyRoute(extra = {}) {
   return {
     api: "openai-completions",
@@ -107,6 +122,52 @@ test("headerForcingProvider returns the base provider unchanged when nothing is 
   const { provider } = recordingProvider();
 
   assert.equal(headerForcingProvider(provider, new Map()), provider);
+});
+
+test("resolveProfile tolerates the frozen section the settings provider serves", () => {
+  // `dsh-settings` hands consumers a `deepFreeze`d resolved section
+  // (dsh-settings lib/index.js: `resolved: deepFreeze(this.resolve(...))`), and
+  // this plugin reads exactly that object through `scope.get()`. schemastery's
+  // resolve writes defaults *into* the object it validates, so a frozen section
+  // makes `providerProfile(source)` throw
+  // `TypeError: Cannot assign to read only property '<header>' of object ...` —
+  // which `resolveProfiles()` then swallows per route, leaving the route dead
+  // with no adapter registered and no visible error. Freeze the whole section to
+  // reproduce the production shape.
+  const route = codebuddyRoute();
+  const frozen = deepFreeze({ providers: { codebuddy: route } });
+
+  const profile = resolveProfile("codebuddy", frozen.providers.codebuddy, env());
+
+  assert.equal(profile.provider, "codebuddy");
+  assert.equal(profile.headers["user-agent"], CODEBUDDY_UA);
+  assert.equal(profile.piProvider.getModels()[0].id, "deepseek-v4-flash");
+});
+
+test("resolveProfile leaves the caller's frozen section untouched", () => {
+  const route = codebuddyRoute();
+  const frozen = deepFreeze({ providers: { codebuddy: route } });
+
+  resolveProfile("codebuddy", frozen.providers.codebuddy, env());
+
+  // Defaults resolved for this call must not have been written back into the
+  // caller's object: the settings document is shared, and mutating it would
+  // leak one route's schema defaults into the stored section.
+  assert.equal(Object.isFrozen(frozen.providers.codebuddy), true);
+  assert.equal(Object.hasOwn(frozen.providers.codebuddy, "modelOverrides"), false);
+  assert.deepEqual(frozen.providers.codebuddy.models, route.models);
+});
+
+test("resolveProfile always carries a real modelErrors map", () => {
+  // dsh-llm-pi-ai >= 0.1.5 reads `profile.modelErrors.get(model)` unconditionally
+  // in `PiAiAdapter.modelOf`, so a profile built here without this field throws
+  // `TypeError: Cannot read properties of undefined (reading 'get')` on the first
+  // request — and only then. The 0.1.2 tree has no such field, so no other test in
+  // this file can catch a regression here; assert the contract directly.
+  const profile = resolveProfile("codebuddy", codebuddyRoute(), env());
+
+  assert.ok(profile.modelErrors instanceof Map, "modelErrors must be a real Map");
+  assert.equal(profile.modelErrors.size, 0, "a route that resolved has no per-model failures");
 });
 
 test("resolveProfile builds a pi-ai provider whose dispatch forces the configured headers", () => {

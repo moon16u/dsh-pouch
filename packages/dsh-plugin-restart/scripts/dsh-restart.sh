@@ -211,6 +211,24 @@ fi
 echo "=== dsh-restart worker $(date '+%F %T') ==="
 echo "mode: $MODE  profile: $PROFILE_HOME  port: $PORT"
 
+# --- systemd delegation -----------------------------------------------------
+# When running in standard production mode (MODE=prod without a custom --port)
+# and dsh.service is active under systemd, delegate the restart to systemctl.
+# This prevents port conflicts between script kill/nohup and systemd auto-heal.
+if [[ "$MODE" == "prod" && -z "${PORT_ARG:-}" ]] && systemctl --user is-active --quiet dsh.service 2>/dev/null; then
+  echo "detected active systemd service: dsh.service; delegating restart to systemctl..."
+  if systemctl --user restart dsh.service; then
+    NEW_PID=$(systemctl --user show --property MainPID --value dsh.service)
+    echo "systemctl restart command issued, new pid: $NEW_PID"
+    echo "$NEW_PID" > "$PROFILE_HOME/dsh-restart.pid"
+    WAIT_FOR_READINESS_ONLY=1
+  else
+    echo "warning: systemctl --user restart dsh.service failed, falling back to manual process kill"
+  fi
+fi
+
+if [[ "${WAIT_FOR_READINESS_ONLY:-0}" != "1" ]]; then
+
 # Find the currently running DSH web process bound to the target profile.
 PIDS=""
 if [[ "$MODE" == "dev" ]]; then
@@ -277,6 +295,8 @@ fi
 NEW_PID=$!
 echo "launched pid: $NEW_PID"
 echo "$NEW_PID" > "$PROFILE_HOME/dsh-restart.pid"
+
+fi # end if [[ "${WAIT_FOR_READINESS_ONLY:-0}" != "1" ]]
 
 # Wait until the web server responds.
 # Check NEW_PID liveness FIRST: if it died during startup (e.g. the port is

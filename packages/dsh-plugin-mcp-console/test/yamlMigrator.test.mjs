@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createRequire } from "node:module";
 import { Store } from "../lib/store.js";
 import {
   ingestProfileMcpEntries,
@@ -282,5 +283,71 @@ test("ingest never eats the following block's header comment", async () => {
   assert.match(after, /# keep: next plugin comment/); // neighbour's comment survives
   assert.doesNotMatch(after, /# mcp one comment/);    // own comment goes with the block
   assert.match(after, /kept-plugin/);
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("ingest keeps the YAML a top-level array when every item is migrated", async () => {
+  // the reported crash: a patch layer holding ONLY mcp-client entries is
+  // trimmed down to comments, and dsh-app-boot's parsePatchList rejects a
+  // non-array document at the next boot
+  const yaml = [
+    "# MCP 配置补丁层",
+    "# 通过 @deepseek-ai/dsh-mcp-client 插件桥接 MCP 服务器。",
+    "",
+    "# dsh-mcp-tavily",
+    "- insert:",
+    "    - id: mcp-tavily",
+    "      name: '@deepseek-ai/dsh-mcp-client'",
+    "      config:",
+    "        serverName: tavily",
+    "        transport: stdio",
+    "        command: bash",
+    "        args:",
+    "          - /home/user/.agents/mcp/tavily-mcp.sh",
+    "",
+  ].join("\n");
+  const { dir, yamlPath, store } = fixture(yaml);
+  const result = await ingestProfileMcpEntries({ store, yamlPath });
+  assert.deepEqual(result.ingested, ["tavily"]);
+  assert.equal(result.cleanedYaml, true);
+  const after = readFileSync(yamlPath, "utf8");
+  assert.match(after, /# MCP 配置补丁层/);          // file header comments survive
+  assert.doesNotMatch(after, /^-\s/m);              // no YAML entries remain
+  assert.match(after, /\[\]\s*$/, "explicit [] appended"); // parsePatchList needs an array
+
+  // and the trimmed file actually parses as an array (host-side contract,
+  // same js-yaml the dsh host uses, resolved from the profile install tree)
+  const jsYaml = createRequire(join("/home/moon1/.dsh/profiles/web", "package.json"))("js-yaml");
+  const parsed = jsYaml.load(after);
+  assert.ok(Array.isArray(parsed), "comments-only remainder must still load as an array");
+  assert.deepEqual(parsed, []);
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("ingest appends [] to an empty-remainder document too", async () => {
+  // no header comments at all: the file must not become an empty string
+  const yaml = [
+    "- insert:",
+    "    - id: mcp-tavily",
+    "      name: '@deepseek-ai/dsh-mcp-client'",
+    "      config:",
+    "        serverName: tavily",
+    "        transport: stdio",
+    "        command: bash",
+  ].join("\n");
+  const { dir, yamlPath, store } = fixture(yaml);
+  await ingestProfileMcpEntries({ store, yamlPath });
+  const after = readFileSync(yamlPath, "utf8");
+  assert.equal(after.trim(), "[]");
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("ingest leaves files that still carry a top-level item untouched in shape", async () => {
+  // regression guard: the [] fallback must not fire when non-MCP plugins remain
+  const { dir, yamlPath, store } = fixture(SAMPLE_YAML);
+  await ingestProfileMcpEntries({ store, yamlPath });
+  const after = readFileSync(yamlPath, "utf8");
+  assert.doesNotMatch(after, /^\[\]/m);
+  assert.match(after, /- insert:/);
   rmSync(dir, { recursive: true, force: true });
 });
