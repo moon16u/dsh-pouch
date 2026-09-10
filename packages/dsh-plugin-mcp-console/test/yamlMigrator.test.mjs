@@ -1,8 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
 import { Store } from "../lib/store.js";
 import {
@@ -11,6 +12,29 @@ import {
   formatMcpYamlEntry,
   defaultProfilePatchYamlPath,
 } from "../lib/yamlMigrator.js";
+
+/**
+ * Resolve the js-yaml a host reads a patch layer with, or `null` on a machine
+ * that has none. The plugin stays library-free — its YAML edit is line-based —
+ * so the host-side parse check borrows the reader wherever it actually lives:
+ * this package's tree first, then the DSH profile whose boot consumes the file.
+ * A machine with neither reports the check rather than failing on a path that
+ * belongs to someone else's install.
+ */
+function hostJsYaml() {
+  const roots = [
+    import.meta.url,
+    pathToFileURL(join(process.env.DSH_HOME ?? join(homedir(), ".dsh"), "profiles", "web", "package.json")).href,
+  ];
+  for (const from of roots) {
+    try {
+      return createRequire(from)("js-yaml");
+    } catch {
+      // not resolvable from this root; try the next one
+    }
+  }
+  return null;
+}
 
 const SAMPLE_YAML = [
   "# Your patch layer for this dsh profile, applied after every bundle layer:",
@@ -286,7 +310,7 @@ test("ingest never eats the following block's header comment", async () => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-test("ingest keeps the YAML a top-level array when every item is migrated", async () => {
+test("ingest keeps the YAML a top-level array when every item is migrated", async (t) => {
   // the reported crash: a patch layer holding ONLY mcp-client entries is
   // trimmed down to comments, and dsh-app-boot's parsePatchList rejects a
   // non-array document at the next boot
@@ -315,12 +339,16 @@ test("ingest keeps the YAML a top-level array when every item is migrated", asyn
   assert.doesNotMatch(after, /^-\s/m);              // no YAML entries remain
   assert.match(after, /\[\]\s*$/, "explicit [] appended"); // parsePatchList needs an array
 
-  // and the trimmed file actually parses as an array (host-side contract,
-  // same js-yaml the dsh host uses, resolved from the profile install tree)
-  const jsYaml = createRequire(join("/home/moon1/.dsh/profiles/web", "package.json"))("js-yaml");
-  const parsed = jsYaml.load(after);
-  assert.ok(Array.isArray(parsed), "comments-only remainder must still load as an array");
-  assert.deepEqual(parsed, []);
+  // and the trimmed file actually parses as an array — the host-side contract,
+  // read by the same js-yaml a host boots the profile with
+  const jsYaml = hostJsYaml();
+  if (jsYaml === null) {
+    t.diagnostic("js-yaml is not resolvable here; the host-side parse check was not run");
+  } else {
+    const parsed = jsYaml.load(after);
+    assert.ok(Array.isArray(parsed), "comments-only remainder must still load as an array");
+    assert.deepEqual(parsed, []);
+  }
   rmSync(dir, { recursive: true, force: true });
 });
 
