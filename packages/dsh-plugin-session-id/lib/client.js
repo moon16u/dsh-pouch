@@ -5,8 +5,9 @@ window.__ModuleLoader__.load({
     var exports = module.exports;
     Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
     var React = require("react");
-    var IconCopyOutline16 = require("@deepseek-ai/dsh-client-ui-primitives").IconCopyOutline16;
-    var IconCheckOutline16 = require("@deepseek-ai/dsh-client-ui-primitives").IconCheckOutline16;
+    var primitives = require("@deepseek-ai/dsh-client-ui-primitives");
+    var IconCopyOutline16 = primitives.IconCopyOutlineRegular || primitives.IconCopyOutline16;
+    var IconCheckOutline16 = primitives.IconCheckOutlineRegular || primitives.IconCheckOutline16;
 
     var NS = "session-id";
 

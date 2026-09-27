@@ -44,9 +44,12 @@ export function formatCurrentTime(now = new Date()) {
 }
 
 function currentTimeMessage() {
+  // rc.2 dropped the catch-all `plugin` source kind (V4 rejects it as UNKNOWN).
+  // A producer-owned kind (`plugin:${name}`) satisfies V4 validation and ensures
+  // the chat UI treats it as an injected context node rather than a human user bubble.
   return createUserMessage({
     content: [{ type: "text", text: formatCurrentTime() }],
-    source: { kind: "plugin", plugin: name },
+    source: { kind: `plugin:${name}` },
   });
 }
 

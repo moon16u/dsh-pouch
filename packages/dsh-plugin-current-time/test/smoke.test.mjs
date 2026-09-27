@@ -52,8 +52,7 @@ test("first step appends exactly one reminder after the claimed prompt", async (
 
   const stamp = decision.messages[1];
   assert.equal(stamp.role, "user");
-  assert.equal(stamp.source.kind, "plugin");
-  assert.equal(stamp.source.plugin, "dsh-current-time");
+  assert.equal(stamp.source.kind, "plugin:dsh-current-time");
   assert.match(stamp.content[0].text, /^<system-reminder>当前时间：/);
 });
 
