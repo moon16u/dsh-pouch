@@ -8,15 +8,6 @@ importers:
 
   .: {}
 
-  packages/dsh-plugin-core-memory:
-    devDependencies:
-      '@deepseek-ai/cordis':
-        specifier: ~4.0.4
-        version: 4.0.4(@deepseek-ai/cordis-plugin-include@1.0.9)(@deepseek-ai/cordis-plugin-loader@1.0.5)
-      '@deepseek-ai/dsh-llm':
-        specifier: 0.1.7-rc.2
-        version: 0.1.7-rc.2(@deepseek-ai/cordis@4.0.4)
-
   packages/dsh-plugin-current-time:
     devDependencies:
       '@deepseek-ai/cordis':
@@ -55,18 +46,6 @@ importers:
       '@earendil-works/pi-ai':
         specifier: ^0.85.1
         version: 0.85.1(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(ws@8.21.3)(zod@4.4.3)
-
-  packages/dsh-plugin-llm-model-listing:
-    devDependencies:
-      '@deepseek-ai/cordis':
-        specifier: ~4.0.4
-        version: 4.0.4(@deepseek-ai/cordis-plugin-include@1.0.9)(@deepseek-ai/cordis-plugin-loader@1.0.5)
-      '@deepseek-ai/dsh-settings':
-        specifier: 0.1.7-rc.2
-        version: 0.1.7-rc.2(e27f754382d4b039489286535994df68)
-      '@deepseek-ai/schemastery':
-        specifier: ~3.18.4
-        version: 3.18.4
 
   packages/dsh-plugin-mcp-console:
     dependencies:
