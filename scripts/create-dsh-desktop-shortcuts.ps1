@@ -3,8 +3,8 @@ $ErrorActionPreference = 'Stop'
 $desktop = [Environment]::GetFolderPath('Desktop')
 $shell = New-Object -ComObject WScript.Shell
 $items = @(
-    @{ Name = 'DSH Start.lnk'; Script = 'dsh-start.bat' },
-    @{ Name = 'DSH Stop.lnk'; Script = 'dsh-stop.bat' }
+    @{ Name = 'DSH Start.lnk'; Script = 'dsh-start.bat'; Icon = 'C:\Program Files\nodejs\node.exe,0' },
+    @{ Name = 'DSH Stop.lnk'; Script = 'dsh-stop.bat'; Icon = 'shell32.dll,27' }
 )
 
 foreach ($item in $items) {
@@ -16,8 +16,8 @@ foreach ($item in $items) {
     $shortcutPath = Join-Path $desktop $item.Name
     $shortcut = $shell.CreateShortcut($shortcutPath)
     $shortcut.TargetPath = $scriptPath
-    $shortcut.WorkingDirectory = $env:USERPROFILE
-    $shortcut.IconLocation = "$env:SystemRoot\System32\wsl.exe,0"
+    $shortcut.WorkingDirectory = $PSScriptRoot
+    $shortcut.IconLocation = $item.Icon
     $shortcut.Save()
     Write-Output $shortcutPath
 }
