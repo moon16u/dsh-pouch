@@ -56,6 +56,9 @@
   ],
   "author": "moon16u",
   "license": "MIT",
+  "engines": {
+    "dsh": ">=0.1.7-rc.2"
+  },
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
