@@ -2,11 +2,12 @@
 
 **English** | [中文](./README.zh-CN.md)
 
-Safe, detached DSH process restart command (`/dsh-restart`) and agent tool (`dsh_restart`).
+Safe, detached DSH process restart commands (`/restart`, `/dsh-restart`) and agent tool (`dsh_restart`) with native Web UI candidate styling.
 
 ## Features
 - **Zero Freeze**: Schedules restart in a detached worker process with a 3-second grace period.
-- **Slash Command**: Run `/dsh-restart` in chat to trigger restart.
+- **Slash Commands**: Run `/restart` (or backwards-compatible `/dsh-restart`) in chat to trigger an immediate, smooth restart.
+- **Native Web UI Candidate**: Renders as `🔄 Restart restart` with an icon, bilingual localized descriptions, and one-click/Enter execution (no hint prompt obstruction).
 - **Agent Tool**: Enables the AI Agent to self-heal and restart DSH when requested.
 - **Failure Visibility**: If a restart fails (new process dies or never becomes ready), `dsh-restart.sh` serves a self-contained error page on the port — failure reason, log tails, and a "restart DSH" button that releases the port and retries. The service always exits by itself, so it can never block a later manual start. The next successful start also surfaces a one-line "previous restart failed" notice in chat (`restart-failed.json` marker).
 

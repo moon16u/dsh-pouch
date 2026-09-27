@@ -99,17 +99,24 @@ export function apply(ctx) {
     // The notice is best-effort by design.
   }
 
+  const restartHandler = async () => {
+    const helperPath = scheduleDetachedRestart(FIXED_DELAY_MS);
+    return {
+      kind: "success",
+      text: `DSH restart scheduled in ${FIXED_DELAY_MS / 1000}s. Helper: ${helperPath}`,
+    };
+  };
+
+  ctx.commands.register({
+    name: "restart",
+    description: "在 3 秒后平滑重启 DSH 进程",
+    handler: restartHandler,
+  });
+
   ctx.commands.register({
     name: "dsh-restart",
-    description: "schedule a detached DSH restart in exactly 3 seconds",
-    input: { hint: "[固定3秒，无需参数]" },
-    handler: async () => {
-      const helperPath = scheduleDetachedRestart(FIXED_DELAY_MS);
-      return {
-        kind: "success",
-        text: `DSH restart scheduled in ${FIXED_DELAY_MS / 1000}s. Helper: ${helperPath}`,
-      };
-    },
+    description: "在 3 秒后平滑重启 DSH 进程",
+    handler: restartHandler,
   });
 
   ctx.tools.register(defineTool({

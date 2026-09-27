@@ -20,7 +20,7 @@
 
 | 插件 | 类型 | 描述 |
 | :--- | :--- | :--- |
-| **[`@moon16u/dsh-plugin-restart`](./packages/dsh-plugin-restart)** | Host / CLI | 提供 `/dsh-restart` 命令与 `dsh_restart` Agent 工具，实现进程分离的安全 3 秒无损自愈重启。 |
+| **[`@moon16u/dsh-plugin-restart`](./packages/dsh-plugin-restart)** | Host / Web UI | 提供 `/restart` 与 `/dsh-restart` 命令、原生 `🔄 重启` 候选菜单与 `dsh_restart` Agent 工具，实现进程分离的安全 3 秒平滑重启。 |
 | **[`@moon16u/dsh-plugin-current-time`](./packages/dsh-plugin-current-time)** | Host / Agent | 每轮对话开始时向 Agent 上下文注入宿主机的真实日期、时间与时区，长会话跨天也不会再按旧日期推理。 |
 | **[`@moon16u/dsh-plugin-session-id`](./packages/dsh-plugin-session-id)** | Web UI | 在 Web 会话顶栏右侧显示当前 Session ID，支持一键快速复制到剪贴板。 |
 | **[`@moon16u/dsh-plugin-web-search-tavily`](./packages/dsh-plugin-web-search-tavily)** | Capability Seam | 基于 Tavily REST API 的真实网络搜索提供方，无缝接入 DSH 官方 `ctx.web` 网络能力标准。 |
@@ -63,8 +63,8 @@ dsh plugin --profile web add https://github.com/moon16u/dsh-pouch.git
 ## 🛠️ 单个插件详解
 
 ### 1. `@moon16u/dsh-plugin-restart`
-* **痛点**：在修改插件或配置后，需要手动到外部终端重启 DSH 进程；如果在 Agent 内部直接 kill 自身会导致会话卡死。
-* **解决**：在 DSH 内部注册 `/dsh-restart` 斜杠命令与 `dsh_restart` Agent 工具，采用 detached setsid 异步工作进程，先正常返回响应再在 3 秒后平滑重启。
+* **痛点**：在修改插件或配置后，需要手动到外部终端重启 DSH 进程；如果在 Agent 内部直接 kill 自身会导致会话卡死；第三方命令在 Web 下拉菜单中缺乏原生图标与中文描述。
+* **解决**：在 DSH 内部注册 `/restart` 与兼容旧版的 `/dsh-restart` 斜杠命令、原生风格的 `🔄 重启 restart` 下拉候选装饰与 `dsh_restart` Agent 工具。采用 detached setsid 异步工作进程，回车或点击后即刻响应并在 3 秒后安全平滑重启。
 
 ### 2. `@moon16u/dsh-plugin-current-time`
 * **痛点**：模型自己没有时钟，只能沿用启动时注入的那一次"今天"。会话跨过午夜后它仍按昨天的日期推理，而对话里没有任何东西会纠正它。

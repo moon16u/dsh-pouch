@@ -20,7 +20,7 @@
 
 | Plugin | Type | Description |
 | :--- | :--- | :--- |
-| **[`@moon16u/dsh-plugin-restart`](./packages/dsh-plugin-restart)** | Host / CLI | Safe, detached DSH process restart command (`/dsh-restart`) and agent tool (`dsh_restart`) with a 3-second grace period. |
+| **[`@moon16u/dsh-plugin-restart`](./packages/dsh-plugin-restart)** | Host / Web UI | Safe, detached DSH process restart commands (`/restart`, `/dsh-restart`) and agent tool (`dsh_restart`) with native Web UI candidate styling. |
 | **[`@moon16u/dsh-plugin-current-time`](./packages/dsh-plugin-current-time)** | Host / Agent | Injects the host's real date, time, and timezone into agent context at the start of every turn, so a long-running session never reasons from a stale date. |
 | **[`@moon16u/dsh-plugin-session-id`](./packages/dsh-plugin-session-id)** | Web UI | Displays a native-styled Session ID badge in the web session header with one-click clipboard copy. |
 | **[`@moon16u/dsh-plugin-web-search-tavily`](./packages/dsh-plugin-web-search-tavily)** | Capability Seam | Real-time web search provider backed by the Tavily REST API, seamlessly integrating with DSH's `ctx.web` capability seam. |
@@ -63,8 +63,8 @@ dsh plugin --profile web add https://github.com/moon16u/dsh-pouch.git
 ## 🛠️ Plugin Highlights
 
 ### 1. `@moon16u/dsh-plugin-restart`
-* **Problem**: After editing plugins or configs, restarting DSH manually in an external terminal is tedious; killing the process directly inside an agent tool causes the session to freeze.
-* **Solution**: Exposes `/dsh-restart` slash command and `dsh_restart` agent tool. Spawns an asynchronous detached worker process that returns the response immediately and restarts cleanly after 3 seconds.
+* **Problem**: After editing plugins or configs, restarting DSH manually in an external terminal is tedious; killing the process directly inside an agent tool causes the session to freeze; stock commands in web chat lack native icons or localized names.
+* **Solution**: Exposes `/restart` (and backwards-compatible `/dsh-restart`) slash commands with native `🔄 Restart restart` slash candidate styling, plus `dsh_restart` agent tool. Spawns an asynchronous detached worker process that returns immediately and restarts cleanly after 3 seconds.
 
 ### 2. `@moon16u/dsh-plugin-current-time`
 * **Problem**: A model has no clock. It infers "today" from whatever the harness injected once at startup, so a session left open across midnight keeps reasoning from yesterday's date — and nothing in the transcript contradicts it.
