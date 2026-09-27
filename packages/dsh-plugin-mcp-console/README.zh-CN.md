@@ -29,7 +29,7 @@ dsh plugin --profile web add @moon16u/dsh-plugin-mcp-console
 | Auto-Ingest | 外部 agent / 脚本按官方推荐写入 `cordis.patch.yml` 的 MCP 条目，在启动与「同步配置并刷新状态」时自动移入动态管理（store 持久化成功才修剪 YAML，绝不丢配置） |
 | YAML 回写 | `POST /api/dsh-mcp-console/export-yaml` 把动态配置一键还原为标准 `cordis.patch.yml` 条目（卸载/备份可逆） |
 | 模型感知 | 通过 `ctx.systemPrompt.section` 向每个 agent 的系统提示注入一段公告：MCP 管理请到设置页操作，勿手改配置文件（独立 inject 作用域，无该服务的宿主上自动休眠） |
-| 设置集成 | `enabled` / `announceToAgent` 总开关走官方 settings provider（`mcp-console` 命名空间，双世代 API 兼容），设置 GUI 可改、即改即生效：`enabled` 关闭整体下线（路由 + MCP 连接 + 公告，store 保留），`announceToAgent` 只控制公告；无 settings 服务的宿主回落条目默认值 |
+| 设置集成 | `enabled` / `announceToAgent` 总开关为 schema 自发现的 `export const Config` 中的 `.volatile()` 字段（rc.2 SettingsForms）：设置 GUI 可改、就地热更新，无需重启 DSH：`enabled` 关闭整体下线（路由 + MCP 连接 + 公告，store 保留），`announceToAgent` 只控制公告；无 settings 服务的宿主回落条目默认值 |
 | 设置 GUI 卡片 | 设置 → 插件 页的「MCP 控制台」卡片（`settings.plugin.item`，键 `mcp-console`）：可折叠、与官方卡片同形（同一批 `--dsw-alias-*` 令牌与尺寸），开关即改即写，被改过的字段带「已自定义」徽章与逐字段「恢复默认」 |
 | 停用后的降级 | `enabled` 关闭后「MCP 服务器」页不再报接口错误，改为显示停用提示与恢复入口（自有前缀路由的 404 即判定为已停用），并停开 SSE 以免反复重试 |
 
