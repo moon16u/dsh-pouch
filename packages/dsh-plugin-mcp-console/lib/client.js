@@ -9,6 +9,13 @@ window.__ModuleLoader__.load({
     // ==== mcp-console client body (synced; keep identical to dsh-pouch/lib/client.js) ====
 
     var McpIcons = require("@deepseek-ai/dsh-client-ui-primitives");
+    var IconRefresh = McpIcons.IconRefreshOutlineRegular || McpIcons.IconRefreshOutline16;
+    var IconPlus = McpIcons.IconPlusOutlineRegular || McpIcons.IconPlusOutline16;
+    var IconClose = McpIcons.IconCloseOutlineRegular || McpIcons.IconCloseOutline16;
+    var IconTrash = McpIcons.IconTrashOutlineRegular || McpIcons.IconTrashOutline16;
+    var IconLink = McpIcons.IconLinkOutlineRegular || McpIcons.IconLinkOutline16;
+    var IconChevronRight = McpIcons.IconChevronRightOutlineRegular || McpIcons.IconChevronRightOutline14;
+    var IconChevronDown = McpIcons.IconChevronDownOutlineRegular || McpIcons.IconChevronDownOutline14;
 
     // ---------------------------------------------------------------------------
     // mcp-console client: an "MCP" settings section (mcp-manager-gui-spec.md)
@@ -243,6 +250,7 @@ window.__ModuleLoader__.load({
       ".mcp-plugin-card{list-style:none;margin:0;border:.5px solid var(--dsw-alias-border-l4,#e5e7eb);border-radius:16px;background:var(--dsw-alias-bg-layer-3,#ffffff);transition:border-color .16s,background .16s}",
       ".mcp-plugin-card:hover{border-color:var(--dsw-alias-label-dimmed,#d1d5db)}",
       ".mcp-plugin-card[data-open=true]{background:var(--dsw-alias-bg-layer-2,#fafafa);border-color:var(--dsw-alias-label-dimmed,#d1d5db)}",
+      ".mcp-plugin-card-flat .mcp-plugin-body{border-top:none;padding-top:0;padding-bottom:0}",
       ".mcp-plugin-header{appearance:none;width:100%;font:inherit;color:inherit;text-align:left;cursor:pointer;background:0 0;border:0;border-radius:12px;display:flex;align-items:center;gap:12px;padding:14px 16px}",
       ".mcp-plugin-header:focus-visible{outline:2px solid var(--dsw-alias-brand-primary,#4d6bfe);outline-offset:-2px}",
       ".mcp-plugin-headtext{display:flex;flex-direction:column;flex:1;gap:4px;min-width:0}",
@@ -486,12 +494,12 @@ window.__ModuleLoader__.load({
               disabled: busy || (props.probe && props.probe.busy === true),
               title: t("test"), "aria-label": t("test"),
               onClick: function () { props.onProbe(server); },
-            }, McpH(McpIcons.IconLinkOutline16, { size: 14 })),
+            }, McpH(IconLink, { size: 14 })),
             readOnly ? null : McpH("button", {
               type: "button", className: "mcp-mgr-del", disabled: busy,
               title: t("remove"), "aria-label": t("remove"),
               onClick: function () { props.onRemove(server); },
-            }, McpH(McpIcons.IconTrashOutline16, { size: 14 })),
+            }, McpH(IconTrash, { size: 14 })),
             McpH(McpSwitch, {
               t: t, enabled: enabled, disabled: busy || readOnly,
               onChange: function (next) { if (!readOnly) props.onToggleServer(server, next); },
@@ -689,7 +697,7 @@ window.__ModuleLoader__.load({
           "aria-expanded": advancedOpen ? "true" : "false",
           onClick: function () { setAdvancedOpen(!advancedOpen); },
         },
-          McpH(McpIcons.IconChevronRightOutline14, { size: 14, style: { transform: advancedOpen ? "rotate(90deg)" : "none", transition: "transform .15s ease" } }),
+          McpH(IconChevronRight, { size: 14, style: { transform: advancedOpen ? "rotate(90deg)" : "none", transition: "transform .15s ease" } }),
           t("formAdvanced")),
         advancedOpen
           ? McpH("div", { className: "mcp-adv-box" },
@@ -784,12 +792,78 @@ window.__ModuleLoader__.load({
           }, t("importConfirm"))));
     }
 
+    function createMcpScope() {
+      var listeners = new Set();
+      var config = { enabled: true, announceToAgent: true };
+      var user = {};
+      var status = "ready";
+      var fetched = false;
+
+      function notify() {
+        listeners.forEach(function (l) { try { l(); } catch (e) {} });
+      }
+
+      function fetchConfig() {
+        if (fetched) return;
+        fetched = true;
+        mcpApi("/health").then(function (health) {
+          if (health && health.config) {
+            config = {
+              enabled: health.config.enabled !== false,
+              announceToAgent: health.config.announceToAgent !== false,
+            };
+            status = "ready";
+            notify();
+          }
+        }, function () {
+          config = { enabled: false, announceToAgent: true };
+          status = "ready";
+          notify();
+        });
+      }
+
+      return {
+        subscribe: function (listener) {
+          listeners.add(listener);
+          return function () { listeners.delete(listener); };
+        },
+        getSnapshot: function () {
+          fetchConfig();
+          return {
+            status: status,
+            value: config,
+            user: user,
+            writable: true,
+          };
+        },
+        set: function (field, value) {
+          user[field] = value;
+          config[field] = value;
+          notify();
+          return mcpApi("/config", {
+            method: "POST",
+            body: JSON.stringify({ config: { [field]: value } }),
+          }).catch(function () {});
+        },
+        unset: function (field) {
+          delete user[field];
+          config[field] = true;
+          notify();
+          return mcpApi("/config", {
+            method: "POST",
+            body: JSON.stringify({ config: { [field]: true } }),
+          }).catch(function () {});
+        },
+      };
+    }
+
     /**
      * The settings section (mcp-manager-gui-spec.md §1–§3): header bar with
      * refresh + add + import, the server list card, and modals.
      */
     function McpSection(props) {
       var t = props.t;
+      var scope = props.scope || createMcpScope();
       var useState = React.useState;
       var useEffect = React.useEffect;
 
@@ -1021,7 +1095,7 @@ window.__ModuleLoader__.load({
               McpH("button", {
                 type: "button", className: "mcp-mgr-iconbtn", "aria-label": t("cancel"),
                 onClick: function () { setMode(null); setEditing(null); },
-              }, McpH(McpIcons.IconCloseOutline16, { size: 14 }))),
+              }, McpH(IconClose, { size: 14 }))),
             McpH(McpServerForm, {
               t: t,
               initial: editing,
@@ -1037,7 +1111,7 @@ window.__ModuleLoader__.load({
               McpH("button", {
                 type: "button", className: "mcp-mgr-iconbtn", "aria-label": t("cancel"),
                 onClick: function () { setMode(null); },
-              }, McpH(McpIcons.IconCloseOutline16, { size: 14 }))),
+              }, McpH(IconClose, { size: 14 }))),
             McpH(McpImportDialog, {
               t: t,
               onCancel: function () { setMode(null); },
@@ -1058,7 +1132,7 @@ window.__ModuleLoader__.load({
               McpH("button", {
                 type: "button", className: "mcp-mgr-iconbtn", "aria-label": t("cancel"),
                 onClick: function () { setConfirm(null); },
-              }, McpH(McpIcons.IconCloseOutline16, { size: 14 }))),
+              }, McpH(IconClose, { size: 14 }))),
             McpH("div", { className: "mcp-form-body" },
               McpH("p", { className: "mcp-mgr-note" }, t("removeConfirm"))),
             McpH("div", { className: "mcp-form-footer" },
@@ -1080,6 +1154,7 @@ window.__ModuleLoader__.load({
         return McpH("div", { className: "mcp-mgr", "data-mcp-console-section": "", "data-mcp-console-offline": "" },
           McpH("div", { className: "mcp-mgr-head" },
             McpH("h2", { className: "mcp-mgr-title" }, t("title"))),
+          McpH(McpPluginCard, { t: t, scope: scope, hideHeader: true }),
           McpH("p", { className: "mcp-mgr-note" }, t("sectionOffline")),
           McpH("p", { className: "mcp-ext" }, t("sectionOfflineHint")));
       }
@@ -1091,15 +1166,16 @@ window.__ModuleLoader__.load({
             type: "button", className: "mcp-mgr-iconbtn", disabled: refreshing,
             title: t("refresh"), "aria-label": t("refresh"),
             onClick: refresh,
-          }, McpH(McpIcons.IconRefreshOutline16, { size: 15 })),
+          }, McpH(IconRefresh, { size: 15 })),
           McpH("button", {
             type: "button", className: "mcp-mgr-btn", disabled: topDisabled,
             onClick: function () { setEditing(null); setMode("add"); },
-          }, McpH(McpIcons.IconPlusOutline16, { size: 14 }), t("add")),
+          }, McpH(IconPlus, { size: 14 }), t("add")),
           McpH("button", {
             type: "button", className: "mcp-mgr-btn", disabled: topDisabled,
             onClick: function () { setMode("import"); },
           }, t("importAction"))),
+        McpH(McpPluginCard, { t: t, scope: scope, hideHeader: true }),
         snapshot
           ? McpH("div", { className: "mcp-mgr-list" }, listChildren)
           : McpH("p", { className: "mcp-mgr-note" }, t("loadingData")),
@@ -1227,10 +1303,16 @@ window.__ModuleLoader__.load({
      */
     function McpPluginCard(props) {
       var t = props.t;
-      var openState = React.useState(false);
+      if (props.hideHeader === true) {
+        return McpH("div", {
+          className: "mcp-plugin-card mcp-plugin-card-flat",
+          "data-mcp-plugin-card": "",
+        }, McpH(McpPluginCardFields, { t: t, scope: props.scope }));
+      }
+      var openState = React.useState(props.defaultOpen === true);
       var open = openState[0], setOpen = openState[1];
       var title = t("pluginCardTitle");
-      return McpH("li", {
+      return McpH("div", {
         className: "mcp-plugin-card",
         "data-open": open ? "true" : "false",
         "data-mcp-plugin-card": "",
@@ -1245,7 +1327,7 @@ window.__ModuleLoader__.load({
           McpH("span", { className: "mcp-plugin-headtext" },
             McpH("span", { className: "mcp-plugin-name" }, title),
             McpH("span", { className: "mcp-plugin-desc" }, t("pluginCardDesc"))),
-          McpH(McpIcons.IconChevronDownOutline14, { size: 14, className: "mcp-plugin-chevron" })),
+          McpH(IconChevronDown, { size: 14, className: "mcp-plugin-chevron" })),
         open ? McpH(McpPluginCardFields, { t: t, scope: props.scope }) : null);
     }
 
@@ -1255,6 +1337,7 @@ window.__ModuleLoader__.load({
       }, "mcp-console: dictionaries");
 
       var mcpT = ctx.locale.bind(McpNS);
+      var mcpDefaultScope = createMcpScope();
 
       ctx.slots.inject("settings.section", function () {
         return ctx.slots.register({
@@ -1262,7 +1345,7 @@ window.__ModuleLoader__.load({
           id: "mcp-console",
           order: 12,
           label: function () { return mcpT("nav"); },
-          inject: function () { return { t: mcpT }; },
+          inject: function () { return { t: mcpT, scope: mcpDefaultScope }; },
         }, McpSection);
       });
 

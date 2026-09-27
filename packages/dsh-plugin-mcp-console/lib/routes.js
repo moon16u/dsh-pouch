@@ -54,7 +54,7 @@ const LOOPBACK_HOSTNAMES = new Set(["127.0.0.1", "localhost", "[::1]"]);
  *        resolved master switches (settings-GUI backed), surfaced in /health
  * @returns {{ dispose: () => void, notify: () => void }} route handle
  */
-export function registerRoutes(ctx, { orchestrator, uiStore, getPluginConfig }) {
+export function registerRoutes(ctx, { orchestrator, uiStore, getPluginConfig, onConfigChange }) {
   const sseClients = new Set();
   let heartbeat = null;
   let notifyTimer = null;
@@ -177,12 +177,30 @@ export function registerRoutes(ctx, { orchestrator, uiStore, getPluginConfig }) 
 
     if (segments[0] === "config") {
       if (method === "GET") {
-        respond(res, 200, { ui: sanitizeUi(uiStore.read().ui) });
+        const storeDoc = uiStore.read();
+        respond(res, 200, {
+          ui: sanitizeUi(storeDoc.ui),
+          config: getPluginConfig ? getPluginConfig() : (storeDoc.config || null),
+        });
         return;
       }
       if (method === "PUT" || method === "POST") {
         const body = await readJson(req);
-        respond(res, 200, { ui: sanitizeUi(uiStore.writeUi(sanitizeUi(body?.ui ?? {}))) });
+        let updatedUi;
+        if (body?.ui !== undefined) {
+          updatedUi = sanitizeUi(uiStore.writeUi(sanitizeUi(body.ui)));
+        }
+        let updatedConfig;
+        if (body?.config !== undefined && typeof uiStore.writeConfig === "function") {
+          updatedConfig = uiStore.writeConfig(body.config);
+          if (typeof onConfigChange === "function") {
+            try { onConfigChange(updatedConfig); } catch {}
+          }
+        }
+        respond(res, 200, {
+          ui: updatedUi ?? sanitizeUi(uiStore.read().ui),
+          config: updatedConfig ?? (getPluginConfig ? getPluginConfig() : null),
+        });
         return;
       }
       respond(res, 405, { error: { code: "method_not_allowed", message: "GET or PUT /config" } });

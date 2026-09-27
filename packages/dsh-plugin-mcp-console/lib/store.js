@@ -52,6 +52,7 @@ export function normalizeDoc(raw) {
     version: typeof raw.version === "number" ? raw.version : STORE_VERSION,
     servers: {},
     ...(isPlainObject(raw.ui) ? { ui: raw.ui } : {}),
+    ...(isPlainObject(raw.config) ? { config: raw.config } : {}),
   };
   if (isPlainObject(raw.servers)) {
     for (const [name, entry] of Object.entries(raw.servers)) {
@@ -121,6 +122,15 @@ export class Store {
     const doc = this.read();
     this._persist({ ...doc, ui });
     return ui;
+  }
+
+  /** Persist only the plugin master config section, keeping servers untouched. */
+  writeConfig(config) {
+    if (!isPlainObject(config)) throw new Error("config must be an object");
+    const doc = this.read();
+    const updated = { ...(doc.config || {}), ...config };
+    this._persist({ ...doc, config: updated });
+    return updated;
   }
 
   /** Atomically write the document (temp file + rename, no backups). */

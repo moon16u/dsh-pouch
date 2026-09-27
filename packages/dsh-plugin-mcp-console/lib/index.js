@@ -33,52 +33,32 @@ export const name = "mcp-console";
 /** Settings namespace the master switches live under (provider contract: [a-z0-9-]). */
 export const MCP_CONSOLE_SETTINGS_NAMESPACE = "mcp-console";
 
-/** Plugin config: master switches, editable from the settings GUI. */
+/** Plugin config: master switches, editable from the settings GUI.
+ *
+ * rc.2 (dsh-settings schema-driven): `SettingsForms` discovers this schema from
+ * the plugin's `export const Config`, and only `.volatile()` fields are editable
+ * in the GUI — a volatile field is hot-updated in place on the config reference
+ * the fiber already holds, without a fiber restart. */
 export const Config = z.object({
   /** Master switch: routes + MCP fibers + SSE (stores are never touched). */
-  enabled: z.boolean().default(true),
+  enabled: z.boolean().default(true).volatile(),
   /** Register the model-facing system-prompt announcement. */
-  announceToAgent: z.boolean().default(true),
+  announceToAgent: z.boolean().default(true).volatile(),
 });
 
-/** Resolve a raw config value (any shape) onto the switch defaults. */
-export function resolveConfig(value) {
-  return {
-    enabled: value?.enabled !== false,
-    announceToAgent: value?.announceToAgent !== false,
-  };
+/** Unwrap a cosmokit volatile reference (rc.2 volatile config) to its current
+ * value; plain values (tests, non-volatile hosts) pass through unchanged. */
+function unwrapValue(v) {
+  return v !== null && typeof v === "object" && typeof v.get === "function" ? v.get() : v;
 }
 
-/**
- * Register this optional settings consumer on both the current provider API
- * (`settings.installSection`, dsh-settings >= 0.1.2) and the pre-0.1.2
- * `register` surface used by older hosts/tests. Same helper as the sibling
- * pouch plugins — kept verbatim so behavior cannot drift between packages.
- */
-function installSettingsSection(ctx, ns, schema, entry, hooks) {
-  ctx.inject(["settings"], (settingsCtx) => {
-    const settings = settingsCtx.settings;
-    if (typeof settings?.installSection === "function") {
-      settings.installSection(ctx, ns, schema, entry, hooks);
-      return;
-    }
-    if (typeof settings?.register !== "function") return;
-    const scope = settings.register(ns, schema, {
-      base: entry,
-      ...(hooks.validate === void 0 ? {} : { validate: hooks.validate }),
-    });
-    hooks.setSource(() => scope.get());
-    settingsCtx.effect?.(() => () => {
-      if (ctx.fiber?.state === 4 || ctx.fiber?.state === 5) return;
-      hooks.setSource(() => entry);
-      hooks.onChange();
-    });
-    hooks.onChange();
-    scope.watch(() => {
-      if (ctx.fiber?.state === 4 || ctx.fiber?.state === 5) return;
-      hooks.onChange();
-    });
-  });
+/** Resolve a raw config value (plain or volatile refs) onto the switch defaults. */
+export function resolveConfig(value, storedConfig) {
+  const merged = { ...storedConfig, ...(value || {}) };
+  return {
+    enabled: unwrapValue(merged?.enabled) !== false,
+    announceToAgent: unwrapValue(merged?.announceToAgent) !== false,
+  };
 }
 
 /**
@@ -98,8 +78,10 @@ const SYSTEM_PROMPT_GUIDANCE =
 const ANNOUNCEMENT_ORDER = 160;
 
 export function apply(ctx, config) {
-  const entry = resolveConfig(config);
-  let current = () => entry;
+  // rc.2: `config` may carry cosmokit volatile refs whose values hot-update in
+  // place; keep `current` pointing at it so resolveConfig() reads live values.
+  let current = () => config;
+  const globalStore = new Store(globalStorePath());
 
   /** Live surfaces, each an inject fiber that can be torn down and rebuilt. */
   let compositionFiber = null;
@@ -131,7 +113,8 @@ export function apply(ctx, config) {
    * have rebuilt them meanwhile), so disposals run from captured locals last.
    */
   async function syncStep() {
-    const value = resolveConfig(current());
+    const storedConfig = globalStore?.read?.()?.config;
+    const value = resolveConfig(current(), storedConfig);
     const wantAnnouncement = value.enabled && value.announceToAgent;
     const toDispose = [];
     if (wantAnnouncement && !announcementFiber) {
@@ -218,7 +201,8 @@ export function apply(ctx, config) {
     const routes = registerRoutes(scope, {
       orchestrator,
       uiStore: globalStore,
-      getPluginConfig: () => resolveConfig(current()),
+      getPluginConfig: () => resolveConfig(current(), globalStore.read().config),
+      onConfigChange: () => sync(),
     });
     const notify = () => routes.notify();
 
@@ -256,14 +240,14 @@ export function apply(ctx, config) {
     }, "mcp-console: composition");
   }
 
-  // Registered AFTER the surface state exists: the pre-0.1.2 helper fires
-  // onChange synchronously during registration, which must find sync() ready.
-  installSettingsSection(ctx, MCP_CONSOLE_SETTINGS_NAMESPACE, Config, entry, {
-    setSource: (source) => {
-      current = source;
-    },
-    onChange: () => sync(),
-  });
+  // rc.2 settings: SettingsForms discovers this plugin's schema from
+  // `export const Config` (above); the volatile switches are hot-updated in
+  // place on the `config` reference this fiber holds, so no registration call
+  // is needed and `current` keeps reading the live value. A GUI edit emits
+  // `settings/document-updated`; re-sync on it — sync() is idempotent and
+  // resolveConfig() reads the latest volatile value.
+  // A real cordis context has `on`; the fake ctx in unit tests omits it.
+  if (typeof ctx.on === "function") ctx.on("settings/document-updated", () => sync());
 
   sync();
 }

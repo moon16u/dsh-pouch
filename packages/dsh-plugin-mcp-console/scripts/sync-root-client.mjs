@@ -36,7 +36,7 @@ const standalone = readFileSync(standalonePath, "utf8");
 const body = extractBody(standalone);
 
 let root = readFileSync(rootPath, "utf8");
-if (!root.includes('var IconCheckOutline16 = require("@deepseek-ai/dsh-client-ui-primitives").IconCheckOutline16;')) {
+if (!root.includes('var _uiPrimitives = require("@deepseek-ai/dsh-client-ui-primitives");')) {
   throw new Error("root client.js anchor (ui-primitives require) not found");
 }
 if (!root.includes("    exports.HeadersSection = HeadersSection;")) {
