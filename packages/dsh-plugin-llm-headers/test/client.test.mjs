@@ -344,11 +344,12 @@ test("the badge still mounts on a host with no settings surface", async () => {
 
   bundle.apply(scope);
 
-  // Deferring on the settings services rather than declaring them in `inject`
-  // is what keeps this true. (The stub's slots.inject fires immediately, so
-  // the mcp-console section registers here too; on a real host without a
-  // settings page its slot is never declared and it never mounts.)
-  assert.deepEqual(registered.map((entry) => entry.id), ["dsh-session-id", "mcp-console"]);
+  // Deferring on the settings surface (ctx.slots.inject("settings.section"))
+  // rather than declaring hard services in `inject` keeps the badge mounting.
+  // (The stub's slots.inject fires immediately, so settings.section occupants
+  // register here too; on a real host without a settings page its slot is never
+  // declared and they never mount.)
+  assert.deepEqual(registered.map((entry) => entry.id), ["dsh-session-id", "llm-headers", "mcp-console"]);
 });
 
 test("rowsOf renders a stored header map as editable rows", async () => {

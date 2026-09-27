@@ -414,15 +414,16 @@ test("resolveProfile refuses a thinking level with no wire spelling", () => {
 });
 
 test("Config defaults an omitted section to no routes", () => {
-  assert.deepEqual(Config({}).providers, {});
+  // rc.2: `providers` is `.volatile()`, so the parsed field is a cosmokit ref.
+  assert.deepEqual(Config({}).providers.get(), {});
   assert.equal(name, "llm-headers");
 });
 
 test("Config leaves api and baseURL unset so a catalog route can inherit them", () => {
-  const resolved = Config({ providers: { deepseek: { headers: { "x-product": "SaaS" } } } });
+  const providers = Config({ providers: { deepseek: { headers: { "x-product": "SaaS" } } } }).providers.get();
 
-  assert.equal(resolved.providers.deepseek.api, void 0);
-  assert.equal(resolved.providers.deepseek.baseURL, void 0);
-  assert.deepEqual(resolved.providers.deepseek.models, []);
-  assert.deepEqual(resolved.providers.deepseek.modelOverrides, {});
+  assert.equal(providers.deepseek.api, void 0);
+  assert.equal(providers.deepseek.baseURL, void 0);
+  assert.deepEqual(providers.deepseek.models, []);
+  assert.deepEqual(providers.deepseek.modelOverrides, {});
 });

@@ -14,34 +14,10 @@ export const inject = ["llm", "settings"];
 
 export const LLM_HEADERS_SETTINGS_NAMESPACE = "llm-headers";
 
-/**
- * Register this optional settings consumer on both the current provider API
- * and the pre-0.1.2 `register` surface used by older hosts/tests.
- */
-function installSettingsSection(ctx, ns, schema, entry, hooks) {
-  ctx.inject(["settings"], (settingsCtx) => {
-    const settings = settingsCtx.settings;
-    if (typeof settings?.installSection === "function") {
-      settings.installSection(ctx, ns, schema, entry, hooks);
-      return;
-    }
-    if (typeof settings?.register !== "function") return;
-    const scope = settings.register(ns, schema, {
-      base: entry,
-      ...(hooks.validate === void 0 ? {} : { validate: hooks.validate }),
-    });
-    hooks.setSource(() => scope.get());
-    settingsCtx.effect?.(() => () => {
-      if (ctx.fiber?.state === 4 || ctx.fiber?.state === 5) return;
-      hooks.setSource(() => entry);
-      hooks.onChange();
-    });
-    hooks.onChange();
-    scope.watch(() => {
-      if (ctx.fiber?.state === 4 || ctx.fiber?.state === 5) return;
-      hooks.onChange();
-    });
-  });
+/** Unwrap a cosmokit volatile reference (rc.2 volatile config) to its current
+ * value; plain values (tests, non-volatile hosts) pass through unchanged. */
+function unwrapValue(v) {
+  return v !== null && typeof v === "object" && typeof v.get === "function" ? v.get() : v;
 }
 
 /**
@@ -141,7 +117,7 @@ const providerProfile = z.object({
 });
 
 export const Config = z.object({
-  providers: z.dict(providerProfile).default({}),
+  providers: z.dict(providerProfile).default({}).volatile(),
 });
 
 /** Fail one route's resolution, naming the setting to fix. */
@@ -793,16 +769,17 @@ function resolveProfiles(ctx, config) {
 export function apply(ctx, config) {
   installGlobalFetchHook();
 
-  let current = () => config;
   let source;
   let profiles = new Map();
   let registration;
 
+  // rc.2: `providers` is a `.volatile()` field — a cosmokit ref whose frozen
+  // snapshot changes identity only when edited, so this cache still holds.
   const snapshot = () => {
-    const latest = current();
+    const latest = unwrapValue(config.providers) ?? {};
     if (latest !== source) {
       source = latest;
-      profiles = resolveProfiles(ctx, latest);
+      profiles = resolveProfiles(ctx, { providers: latest });
     }
     return profiles;
   };
@@ -861,22 +838,18 @@ export function apply(ctx, config) {
     setFetchHeaderRules(rules);
   };
 
+  // rc.2: the section is discovered from `export const Config`; its volatile
+  // `providers` hot-updates in place. Adapters + header rules are registered by
+  // the registerRoutes() call at the end of apply; re-run both on every GUI edit
+  // (settings/document-updated), now that the pre-0.1.2 settings helper is gone.
   refreshRules();
 
-  installSettingsSection(ctx, LLM_HEADERS_SETTINGS_NAMESPACE, Config, config, {
-    setSource: (next) => {
-      current = next;
-    },
-    onChange: () => {
+  if (typeof ctx.on === "function") {
+    ctx.on("settings/document-updated", () => {
       refreshRules();
       registerRoutes();
-    },
-  });
-
-  ctx.on("settings/updated", () => {
-    refreshRules();
-    registerRoutes();
-  });
+    });
+  }
 
   ctx.on("llm/adapters-updated", () => {
     registerRoutes();

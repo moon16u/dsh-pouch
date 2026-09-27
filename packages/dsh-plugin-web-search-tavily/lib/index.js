@@ -16,40 +16,26 @@ const inject = ["web"];
 
 const Config = z.object({
   apiKey: z.string().role("secret"),
-  apiKeyEnv: z.string().role("credential-ref").default(DEFAULT_API_KEY_ENV),
-  baseURL: z.string(),
-  searchDepth: z.union([z.const("basic"), z.const("advanced"), z.const("fast"), z.const("ultra-fast")]).default(DEFAULT_SEARCH_DEPTH),
-  maxResults: z.number().step(1).min(1).max(20).default(DEFAULT_MAX_RESULTS),
+  apiKeyEnv: z.string().role("credential-ref").default(DEFAULT_API_KEY_ENV).volatile(),
+  baseURL: z.string().volatile(),
+  searchDepth: z.union([z.const("basic"), z.const("advanced"), z.const("fast"), z.const("ultra-fast")]).default(DEFAULT_SEARCH_DEPTH).volatile(),
+  maxResults: z.number().step(1).min(1).max(20).default(DEFAULT_MAX_RESULTS).volatile(),
 });
 
 const SEARCH_BASE_URL_ENV = "TAVILY_SEARCH_BASE_URL";
 const WEB_SEARCH_TAVILY_SETTINGS_NAMESPACE = "web-search-tavily";
 
-/** Register the settings consumer against both DSH settings generations. */
-function installSettingsSection(ctx, ns, schema, entry, hooks) {
-  ctx.inject(["settings"], (settingsCtx) => {
-    const settings = settingsCtx.settings;
-    if (typeof settings?.installSection === "function") {
-      settings.installSection(ctx, ns, schema, entry, hooks);
-      return;
-    }
-    if (typeof settings?.register !== "function") return;
-    const scope = settings.register(ns, schema, {
-      base: entry,
-      ...(hooks.validate === void 0 ? {} : { validate: hooks.validate }),
-    });
-    hooks.setSource(() => scope.get());
-    settingsCtx.effect?.(() => () => {
-      if (ctx.fiber?.state === 4 || ctx.fiber?.state === 5) return;
-      hooks.setSource(() => entry);
-      hooks.onChange();
-    });
-    hooks.onChange();
-    scope.watch(() => {
-      if (ctx.fiber?.state === 4 || ctx.fiber?.state === 5) return;
-      hooks.onChange();
-    });
-  });
+/** Unwrap a cosmokit volatile reference (rc.2 volatile config) to its value;
+ * plain values pass through unchanged. */
+function unwrapValue(v) {
+  return v !== null && typeof v === "object" && typeof v.get === "function" ? v.get() : v;
+}
+
+/** Snapshot a config whose `.volatile()` fields are cosmokit refs into a plain
+ * object, so the search provider reads live values on every call. */
+function plainConfig(config) {
+  if (config === null || typeof config !== "object") return config;
+  return Object.fromEntries(Object.entries(config).map(([k, v]) => [k, unwrapValue(v)]));
 }
 
 function resolveOptions(ctx, config) {
@@ -216,14 +202,12 @@ function isAbortError(error) {
 }
 
 function apply(ctx, config) {
-  let current = () => config;
-  installSettingsSection(ctx, WEB_SEARCH_TAVILY_SETTINGS_NAMESPACE, Config, config, {
-    setSource: (source) => {
-      current = source;
-    },
-    onChange: () => {},
-  });
-  ctx.web.registerSearchProvider(new TavilySearchProvider(() => resolveOptions(ctx, current())));
+  // rc.2: the section comes from `export const Config`; `.volatile()` fields are
+  // GUI-editable and hot-update in place. The provider reads a plain snapshot on
+  // every search, so edits take effect live without re-registration.
+  ctx.web.registerSearchProvider(
+    new TavilySearchProvider(() => resolveOptions(ctx, plainConfig(config))),
+  );
 }
 
 export { Config, PROVIDER_ID, TavilySearchProvider, WEB_SEARCH_TAVILY_SETTINGS_NAMESPACE, apply, inject, name };
