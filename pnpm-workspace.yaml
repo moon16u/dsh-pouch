@@ -1,7 +1,5 @@
 packages:
   - 'packages/*'
-  - '!packages/dsh-plugin-core-memory'
-  - '!packages/dsh-plugin-llm-model-listing'
 
 # Transitive build scripts from @earendil-works/pi-ai's Google/Vertex path.
 # Those protocols are never reached from this workspace, so their postinstall
