@@ -104,9 +104,9 @@ test("dsh_restart without args schedules 3s", async () => {
   assert.match(result.text, /scheduled in 3s/);
 });
 
-test("package.json exports ./client with 0.4.0 and correct inject", async () => {
+test("package.json exports ./client with 0.4.1 and correct inject", async () => {
   const pkg = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
-  assert.equal(pkg.version, "0.4.0");
+  assert.equal(pkg.version, "0.4.1");
   assert.ok(pkg.exports["./client"]);
   assert.equal(pkg.exports["./client"].default, "./lib/client.js");
   assert.equal(pkg.exports["./client"].types, "./lib/types/client/index.d.ts");
