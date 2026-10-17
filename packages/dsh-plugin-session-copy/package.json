@@ -1,6 +1,6 @@
 {
   "name": "@moon16u/dsh-plugin-session-copy",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Copy the current session's title, storage directory, or working directory from the web session header",
   "type": "module",
   "main": "lib/index.js",
@@ -35,24 +35,24 @@
     }
   },
   "engines": {
-    "dsh": ">=0.2.0-rc.2"
+    "dsh": ">=0.2.1-rc.1"
   },
   "peerDependencies": {
     "react": "^18.2.0",
-    "@deepseek-ai/cordis": "~4.0.4",
-    "@deepseek-ai/dsh-client-locale": ">=0.2.0-rc.2",
-    "@deepseek-ai/dsh-client-ui-conversation": ">=0.2.0-rc.2",
-    "@deepseek-ai/dsh-client-ui-primitives": ">=0.2.0-rc.2",
-    "@deepseek-ai/dsh-client-ui-slots": ">=0.2.0-rc.2"
+    "@deepseek-ai/cordis": "~4.0.5",
+    "@deepseek-ai/dsh-client-locale": ">=0.2.1-rc.1",
+    "@deepseek-ai/dsh-client-ui-conversation": ">=0.2.1-rc.1",
+    "@deepseek-ai/dsh-client-ui-primitives": ">=0.2.1-rc.1",
+    "@deepseek-ai/dsh-client-ui-slots": ">=0.2.1-rc.1"
   },
   "devDependencies": {
     "@types/react": "~18.3.1",
     "react": "^18.2.0",
-    "@deepseek-ai/dsh-client-locale": "0.2.0-rc.2",
-    "@deepseek-ai/dsh-client-ui-conversation": "0.2.0-rc.2",
-    "@deepseek-ai/dsh-client-ui-slots": "0.2.0-rc.2",
-    "@deepseek-ai/cordis": "~4.0.4",
-    "@deepseek-ai/dsh-client-ui-primitives": "0.2.0-rc.2"
+    "@deepseek-ai/dsh-client-locale": "0.2.1-rc.1",
+    "@deepseek-ai/dsh-client-ui-conversation": "0.2.1-rc.1",
+    "@deepseek-ai/dsh-client-ui-slots": "0.2.1-rc.1",
+    "@deepseek-ai/cordis": "~4.0.5",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.1-rc.1"
   },
   "scripts": {
     "test": "node --test test/*.test.mjs"
