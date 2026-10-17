@@ -1383,6 +1383,11 @@ window.__ModuleLoader__.load({
     exports.mcpDictionaries = { zh: mcpZh, en: mcpEn };
     exports.mcpInject = mcpInject;
 
+    // The bundle's own entry identity: cordis resolves a client module by its
+    // `apply`/`inject` exports, so the prefixed aliases above are not enough.
+    exports.apply = mcpConsoleApply;
+    exports.inject = mcpInject;
+
     // ==== end mcp-console client body ====
     return module.exports;
   }

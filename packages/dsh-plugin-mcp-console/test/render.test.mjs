@@ -76,6 +76,19 @@ test("standalone bundle McpSection renders without crashing", { skip: !existsSyn
   assert.match(html, /data-mcp-console-section/);
 });
 
+// The web module loader hands `unwrapExports()` straight to `ctx.registry.plugin()`,
+// which resolves a plugin by its `apply` method. A bundle exporting only the
+// prefixed aliases (`mcpConsoleApply`/`mcpInject`) fails the whole frontend boot
+// with `invalid plugin, expect function or object with an "apply" method`.
+test("standalone bundle declares the entry identity the loader needs", async () => {
+  const { react } = loadReactModules();
+  const bundle = await loadBundle(join(here, "..", "lib", "client.js"), react);
+  assert.equal(typeof bundle.apply, "function");
+  assert.ok(Array.isArray(bundle.inject));
+  assert.equal(bundle.apply, bundle.mcpConsoleApply);
+  assert.deepEqual(bundle.inject, bundle.mcpInject);
+});
+
 test("server card renders the test button and every probe outcome", { skip: !existsSync(reactPath) || !existsSync(reactDomPath) }, async () => {
   const { react, reactDomServer } = loadReactModules();
   const bundle = await loadBundle(join(here, "..", "lib", "client.js"), react);
