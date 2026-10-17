@@ -12,7 +12,8 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { dirname as posixDirname, win32 } from "node:path";
+import { homedir } from "node:os";
+import { dirname as posixDirname, join, win32 } from "node:path";
 import { apply, SESSION_COPY_DIRECTORY_PATH } from "../lib/index.js";
 
 const ROUTE_URL = "http://localhost/api/dsh-session-copy/directory";
@@ -126,6 +127,41 @@ test("200: returns the containing directory as a plain trailing-separator path",
 	assert.ok(!body.directory.endsWith("//"), "exactly one trailing separator");
 	// The raw spelling must round-trip: this is the value the user pastes.
 	assert.equal(body.directory, "/tmp/_tmp_wb logs/会话目录/");
+});
+
+test("200: the home prefix is abbreviated to ~ and stays shell-pasteable", async () => {
+	const home = homedir();
+	// The exact home directory itself.
+	let fake = makeCtx({ persistence: makePersistence(join(home, "session.jsonl")) });
+	apply(fake.ctx);
+	let body = await (await call(fake.registrations, "?sessionId=h-1")).json();
+	assert.equal(body.directory, `${home === "/" ? "/" : "~"}/`);
+
+	// A path inside home: the prefix is swapped, the tail is kept verbatim.
+	const dir = join(home, "logs", "会话 目录");
+	fake = makeCtx({ persistence: makePersistence(join(dir, "session.jsonl")) });
+	apply(fake.ctx);
+	body = await (await call(fake.registrations, "?sessionId=h-2")).json();
+	assert.equal(body.directory, `~${dir.slice(home.length)}/`);
+	assert.ok(!body.directory.includes(home), "the home prefix is gone");
+	assert.ok(body.directory.endsWith("/"), "the trailing separator survives abbreviation");
+
+	// A look-alike prefix must not be touched: only the exact home matches.
+	if (home !== "/" && home.endsWith("/")) {
+		const lookAlike = `${home}x`;
+		fake = makeCtx({ persistence: makePersistence(`${lookAlike}/s/s.jsonl`) });
+		apply(fake.ctx);
+		body = await (await call(fake.registrations, "?sessionId=h-3")).json();
+		assert.equal(body.directory, `${lookAlike}/s/`);
+	}
+});
+
+test("200: paths outside home are returned verbatim", async () => {
+	const dir = "/srv/dsh-storage";
+	const fake = makeCtx({ persistence: makePersistence(`${dir}/s.jsonl`) });
+	apply(fake.ctx);
+	const body = await (await call(fake.registrations, "?sessionId=o-1")).json();
+	assert.equal(body.directory, `${dir}/`);
 });
 
 test("200: persistence is also reachable through the injection scope", async () => {

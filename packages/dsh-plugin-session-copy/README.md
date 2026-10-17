@@ -7,7 +7,7 @@ Copy the current session's title, storage directory, or working directory from t
 ## Features
 - Native-styled **Copy** button in the session header utilities area.
 - Opens a menu with three copy targets: **Session title**, **Session directory**, and **Working directory**.
-- **Session directory** copies the session's real on-disk folder as a plain path (trailing separator, no `file://` prefix and no percent-encoding), resolved by a read-only host route; it is disabled with a stated reason when the session has not been written to disk yet or the storage backend cannot locate it.
+- **Session directory** copies the session's real on-disk folder as a plain path (trailing separator, no `file://` prefix and no percent-encoding; the home prefix is abbreviated to `~`, which the shell expands back), resolved by a read-only host route; it is disabled with a stated reason when the session has not been written to disk yet or the storage backend cannot locate it.
 - **Session title** and **Working directory** copy the values the header already displays.
 - Instant feedback (`Copied` / `Copy failed`) with an `aria-live` announcement. The shared clipboard helper falls back to `execCommand` when the async Clipboard API is unavailable; rejected writes report failure.
 - Mostly client-side UI; the host half adds exactly one authenticated, read-only directory lookup route.
@@ -33,7 +33,7 @@ Either way, **restart `dsh web` once** after installing. No manual `cordis.patch
 `GET /api/dsh-session-copy/directory?sessionId=<id>` — authenticated by the connection
 service, read-only, `no-store`. It resolves the stored log through the JSONL persistence
 backend's public `resolveCurrentLog(id, signal)` and returns
-`{ok:true, directory}` (a plain filesystem path). This API only locates current-format
+`{ok:true, directory}` (a plain filesystem path; the home prefix is abbreviated to `~`). This API only locates current-format
 logs; older log generations cannot be copied through it. An empty resolution does
 not distinguish unwritten sessions from unsupported log formats. The route never
 reads log contents, flushes, migrates, or takes a write lease. Session IDs are opaque,

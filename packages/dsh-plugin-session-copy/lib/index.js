@@ -24,9 +24,12 @@
  * The response carries a plain filesystem path, not a `file://` URI: the value
  * is meant to be read and pasted, and a URI would add an escaping layer
  * (`%7E` for `~`) without making the path usable anywhere it is not already.
+ * The home-directory prefix is abbreviated to `~`: the shell expands it back,
+ * so the value stays pasteable while reading shorter.
  *
  * @packageDocumentation
  */
+import { homedir } from "node:os";
 import { dirname, sep } from "node:path";
 
 /** Authenticated route serving the on-disk directory of one Session. */
@@ -116,7 +119,7 @@ async function sessionDirectoryResponse(scope, request) {
 			message: "The session is not on disk yet, or its log format cannot be located by this API."
 		});
 	}
-	const directory = withTrailingSeparator(dirname(logPath));
+	const directory = abbreviateHome(withTrailingSeparator(dirname(logPath)));
 	return jsonResponse(200, { ok: true, directory });
 }
 
@@ -130,6 +133,22 @@ function withTrailingSeparator(directory) {
 	let trimmed = directory;
 	while (trimmed.endsWith(sep)) trimmed = trimmed.slice(0, -1);
 	return trimmed === "" ? directory : trimmed + sep;
+}
+
+/**
+* Abbreviate the home-directory prefix to `~`: the shell expands it back, so
+* the value stays pasteable while reading shorter. Only the exact home prefix
+* is replaced — a path merely inside a look-alike directory stays verbatim.
+* @param directory - Absolute directory path, separator already normalized.
+* @returns The path with its home prefix swapped for `~`, or the input.
+*/
+function abbreviateHome(directory) {
+	const home = homedir();
+	if (home === "" || home === "/") return directory;
+	const prefix = home.endsWith(sep) ? home.slice(0, -1) : home;
+	if (directory === prefix) return "~" + sep;
+	if (directory.startsWith(prefix + sep)) return "~" + directory.slice(prefix.length);
+	return directory;
 }
 
 /**

@@ -71,7 +71,7 @@ dsh plugin --profile web add https://github.com/moon16u/dsh-pouch.git
 
 ### 3. `@moon16u/dsh-plugin-session-copy`
 * **Problem**: Getting the current session's storage folder, title, or working directory out of the UI means digging through URLs, console logs, or the filesystem by hand.
-* **Solution**: Injects a native-styled **Copy** button into the web header utility bar. It opens a menu with three targets — **Session title**, **Session directory** (the session's real on-disk folder path), and **Working directory** — each disabled with a stated reason until its value exists. The directory comes from one authenticated, read-only host route over the JSONL backend's public `resolveCurrentLog`; it only locates current-format logs, never reads log contents, and takes no write lease. An empty result may mean an unwritten session or an unsupported log format; older generations remain unavailable.
+* **Solution**: Injects a native-styled **Copy** button into the web header utility bar. It opens a menu with three targets — **Session title**, **Session directory** (the session's real on-disk folder path, home prefix abbreviated to `~`), and **Working directory** — each disabled with a stated reason until its value exists. The directory comes from one authenticated, read-only host route over the JSONL backend's public `resolveCurrentLog`; it only locates current-format logs, never reads log contents, and takes no write lease. An empty result may mean an unwritten session or an unsupported log format; older generations remain unavailable.
 
 ### 4. `@moon16u/dsh-plugin-web-search-tavily`
 * **Problem**: Built-in search engines may be restricted or lack high-quality synthesized web answers.
