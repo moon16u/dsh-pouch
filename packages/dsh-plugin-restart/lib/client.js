@@ -1,4 +1,3 @@
-// Note: Keep in sync with the restart block in dsh-pouch/lib/client.js
 window.__ModuleLoader__.load({
   id: "@moon16u/dsh-plugin-restart",
   factory: (require) => {

@@ -7,12 +7,11 @@
 [English](./README.md) | **中文**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![npm](https://img.shields.io/npm/v/@moon16u/dsh-pouch.svg?color=cb3837)](https://www.npmjs.com/package/@moon16u/dsh-pouch)
-[![DeepSeek Harness](https://img.shields.io/badge/DSH-0.1.7--rc.2-purple.svg)](https://github.com/deepseek-ai/deepseek-harness)
+[![DeepSeek Harness](https://img.shields.io/badge/DSH-0.2.1--rc.1-purple.svg)](https://github.com/deepseek-ai/deepseek-harness)
 [![pnpm workspace](https://img.shields.io/badge/pnpm-workspace-orange.svg)](https://pnpm.io/workspaces)
 
-> **dsh-pouch** 是一个专为 [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) 打造的实用小插件工具箱（Pouch Toolkit）。  
-> 旨在提供**小而美、轻量、开箱即用**的实用微扩展，提升日常使用与开发体验。
+> **dsh-pouch** 是一个包含五个**相互独立、可单独安装**的 [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) 插件的 monorepo。
+> 仓库根目录只是 pnpm workspace——它**不是** DSH bundle，不能安装，也从不发布到 npm。按需安装其中任意插件即可。
 
 ---
 
@@ -28,34 +27,38 @@
 
 ---
 
-## 🚀 快速安装与使用
+## 🚀 安装
 
-### 方式一：通过 DSH CLI 一行命令一键安装（推荐 ⭐️⭐️⭐️⭐️⭐️）
-
-只需在终端执行一行命令，DSH 将自动下载并加载全部 5 个实用插件（0 手动配置，开箱即用）：
+每个插件都是独立的 DSH bundle，拥有独立的 npm 包与版本号。按需安装：
 
 ```bash
-# 1. 一键安装整套工具箱（来自 npm）
-dsh plugin --profile web add @moon16u/dsh-pouch
-
-# 或直接通过 GitHub 仓库安装
-dsh plugin --profile web add https://github.com/moon16u/dsh-pouch.git
+dsh plugin --profile web add @moon16u/dsh-plugin-restart
+dsh plugin --profile web add @moon16u/dsh-plugin-current-time
+dsh plugin --profile web add @moon16u/dsh-plugin-session-copy
+dsh plugin --profile web add @moon16u/dsh-plugin-web-search-tavily
+dsh plugin --profile web add @moon16u/dsh-plugin-mcp-console
 ```
 
----
+安装后**重启一次 `dsh web`**（bundle 层只在启动时组合）。无需手改 `cordis.patch.yml`——每个包都自带挂载补丁。
 
-### 方式二：通过 Git 源码本地链接安装
+`web-search-tavily` 只注册提供方、不自动选中。想让它作为活跃搜索提供方，按[它自己的 README](./packages/dsh-plugin-web-search-tavily/README.zh-CN.md) 加一行 `web` 覆盖即可。
 
-1. **克隆仓库到本地**：
-   ```bash
-   git clone https://github.com/moon16u/dsh-pouch.git ~/dsh-pouch
-   ```
+### 从本地检出的仓库安装
 
-2. **在 DSH Profile 中一键引入 Bundle**：
-   ```bash
-   dsh plugin --profile web add file:~/dsh-pouch
-   ```
-   *DSH 将自动识别 `dsh.bundle` 并自动挂载内置的 `cordis.patch.yml`，无需手动编辑配置文件。*
+```bash
+git clone https://github.com/moon16u/dsh-pouch.git ~/dsh-pouch
+dsh plugin --profile web add file:~/dsh-pouch/packages/dsh-plugin-restart
+```
+
+### 从旧的一体化 bundle 迁移
+
+`@moon16u/dsh-pouch` 曾经是一个加载全部五个插件的单一 bundle。最后一个 bundle 版本是 **0.7.3**，现已弃用、不再更新。如果你的 profile 仍依赖它，请**先移除**再安装各独立包：
+
+```bash
+dsh plugin --profile web remove @moon16u/dsh-pouch
+```
+
+不要把旧 bundle 与独立包同时安装——两者会加载同一批插件，导致重复的 restart 命令、重复的设置卡片和重复的 MCP 控制台。
 
 ---
 

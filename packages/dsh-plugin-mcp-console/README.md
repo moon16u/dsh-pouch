@@ -15,9 +15,6 @@ belong to the official `@deepseek-ai/dsh-mcp-client`; this plugin is only
 ## Installation
 
 ```bash
-# Recommended: the whole pouch bundle (this plugin ships inside it)
-dsh plugin --profile web add @moon16u/dsh-pouch
-# Or standalone:
 dsh plugin --profile web add @moon16u/dsh-plugin-mcp-console
 ```
 
@@ -63,12 +60,7 @@ Then open DSH Web → bottom-left Settings → **"MCP servers"**.
 ## Development
 
 ```bash
-pnpm --filter @moon16u/dsh-plugin-mcp-console test     # 73 tests
-node scripts/sync-root-client.mjs                      # after editing lib/client.js, sync into the pouch root bundle
-```
-
-The marked section inside `lib/client.js` is kept identical to the dsh-pouch
-root `lib/client.js` by the sync script; tests pin it against drift.
+pnpm --filter @moon16u/dsh-plugin-mcp-console test
 
 ## License
 [MIT](../../LICENSE)

@@ -50,20 +50,13 @@ data the reminder still carries the numeric UTC offset.
 
 ## Install
 
-Ships as part of the [`@moon16u/dsh-pouch`](../../README.md) bundle (recommended) — no separate
-installation step. The bundle's host entry mounts it automatically:
-
-```bash
-dsh plugin --profile web add @moon16u/dsh-pouch
-```
-
-Or install this plugin standalone:
+Install this plugin as its own DSH bundle:
 
 ```bash
 dsh plugin --profile web add @moon16u/dsh-plugin-current-time
 ```
 
-Either way, **restart `dsh web` once** after installing. No manual
+**Restart `dsh web` once** after installing. No manual
 `cordis.patch.yml` edits needed — the package carries its own patch.
 
 ## Test

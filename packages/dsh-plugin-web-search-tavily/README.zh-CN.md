@@ -11,24 +11,17 @@
 
 ## 安装
 
-随 [`@moon16u/dsh-pouch`](../../README.zh-CN.md) 套件安装（推荐）——根 patch 层已用合理默认值接好：
-
-```bash
-dsh plugin --profile web add @moon16u/dsh-pouch
-```
-
-或独立安装本插件：
+独立安装本插件：
 
 ```bash
 dsh plugin --profile web add @moon16u/dsh-plugin-web-search-tavily
 ```
 
-两种方式安装后都需**重启一次 `dsh web`**。
+安装后需**重启一次 `dsh web`**。
 
 ### 配置
 
-在 pouch 套件内开箱即用（根 patch 已选它为搜索提供方）。独立安装且想让它作为活跃提供方的，
-在 profile 的 `cordis.patch.yml` 里加：
+想让它作为活跃搜索提供方，在 profile 的 `cordis.patch.yml` 里加：
 
 ```yaml
 - id: web

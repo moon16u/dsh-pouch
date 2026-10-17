@@ -13,19 +13,13 @@ Safe, detached DSH process restart commands (`/restart`, `/dsh-restart`) and age
 
 ## Installation
 
-Ships inside the [`@moon16u/dsh-pouch`](../../README.md) bundle (recommended):
-
-```bash
-dsh plugin --profile web add @moon16u/dsh-pouch
-```
-
-Or install this plugin standalone:
+Install this plugin as its own DSH bundle:
 
 ```bash
 dsh plugin --profile web add @moon16u/dsh-plugin-restart
 ```
 
-Either way, **restart `dsh web` once** after installing (bundle layers compose at startup). No manual `cordis.patch.yml` edits needed — the package carries its own patch.
+**Restart `dsh web` once** after installing (bundle layers compose at startup). No manual `cordis.patch.yml` edits needed — the package carries its own patch.
 
 ## Testing
 ```bash

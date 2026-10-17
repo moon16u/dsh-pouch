@@ -9,9 +9,6 @@ DSH（DeepSeek Harness）Web GUI 的 **MCP 服务器管理控制台**：在设�
 ## 安装
 
 ```bash
-# dsh-pouch 已装则跳过（本包随 pouch bundle 分发）
-dsh plugin --profile web add @moon16u/dsh-pouch
-# 独立安装（发布后）：
 dsh plugin --profile web add @moon16u/dsh-plugin-mcp-console
 ```
 
@@ -56,8 +53,4 @@ dsh plugin --profile web add @moon16u/dsh-plugin-mcp-console
 ## 开发
 
 ```bash
-pnpm --filter @moon16u/dsh-plugin-mcp-console test     # 73 个测试
-node scripts/sync-root-client.mjs                      # 改 lib/client.js 后同步进 dsh-pouch 根 bundle
-```
-
-包内 `lib/client.js` 与 dsh-pouch 根 `lib/client.js` 中的标记段由同步脚本保持一致，测试锁定防漂移。
+pnpm --filter @moon16u/dsh-plugin-mcp-console test

@@ -11,26 +11,18 @@ Tavily-backed web search provider for the DeepSeek Harness capability seam (`ctx
 
 ## Installation
 
-Ships inside the [`@moon16u/dsh-pouch`](../../README.md) bundle (recommended) — the bundle's
-patch layer wires it up with sensible defaults:
-
-```bash
-dsh plugin --profile web add @moon16u/dsh-pouch
-```
-
-Or install this plugin standalone:
+Install this plugin as its own DSH bundle:
 
 ```bash
 dsh plugin --profile web add @moon16u/dsh-plugin-web-search-tavily
 ```
 
-Either way, **restart `dsh web` once** after installing.
+**Restart `dsh web` once** after installing.
 
 ### Configuration
 
-Inside the pouch bundle, it works out of the box (the root patch already selects it
-as the search provider). Standalone installs that want it as the active provider add
-this to their profile's `cordis.patch.yml`:
+To make it the active search provider, add this to your profile's
+`cordis.patch.yml`:
 
 ```yaml
 - id: web

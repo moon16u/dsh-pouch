@@ -1,6 +1,6 @@
 {
   "name": "@moon16u/dsh-plugin-session-copy",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Copy the current session's title, storage directory, or working directory from the web session header",
   "type": "module",
   "main": "lib/index.js",
@@ -58,6 +58,11 @@
     "test": "node --test test/*.test.mjs"
   },
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/moon16u/dsh-pouch.git",
+    "directory": "packages/dsh-plugin-session-copy"
+  },
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"

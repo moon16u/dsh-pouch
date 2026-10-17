@@ -1,46 +1,9 @@
 {
-  "name": "@moon16u/dsh-pouch",
-  "version": "0.7.3",
-  "description": "A collection of small, beautiful, and practical plugins for DeepSeek Harness (DSH)",
+  "name": "dsh-pouch-workspace",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Monorepo for five independent DeepSeek Harness (DSH) plugins. The workspace root is not a DSH bundle and is never published to npm.",
   "type": "module",
-  "main": "./lib/index.js",
-  "exports": {
-    ".": "./lib/index.js",
-    "./client": "./lib/client.js",
-    "./current-time": "./packages/dsh-plugin-current-time/lib/index.js",
-    "./mcp-console": "./packages/dsh-plugin-mcp-console/lib/index.js",
-    "./mcp-console/client": "./packages/dsh-plugin-mcp-console/lib/client.js",
-    "./restart": "./packages/dsh-plugin-restart/lib/index.js",
-    "./restart/client": "./packages/dsh-plugin-restart/lib/client.js",
-    "./session-copy": "./packages/dsh-plugin-session-copy/lib/index.js",
-    "./session-copy/client": "./packages/dsh-plugin-session-copy/lib/client.js",
-    "./web-search-tavily": "./packages/dsh-plugin-web-search-tavily/lib/index.js",
-    "./cordis.patch.yml": "./cordis.patch.yml",
-    "./package.json": "./package.json"
-  },
-  "files": [
-    "lib",
-    "packages",
-    "!packages/**/node_modules",
-    "scripts",
-    "cordis.patch.yml"
-  ],
-  "dsh": {
-    "bundle": {
-      "patch": "./cordis.patch.yml"
-    },
-    "client": {
-      "inject": [
-        "@deepseek-ai/dsh-client-connection",
-        "@deepseek-ai/dsh-client-locale",
-        "@deepseek-ai/dsh-client-ui-commands",
-        "@deepseek-ai/dsh-client-ui-conversation",
-        "@deepseek-ai/dsh-client-ui-settings",
-        "@deepseek-ai/dsh-client-ui-slots"
-      ],
-      "platform": "web"
-    }
-  },
   "scripts": {
     "test": "pnpm -r test"
   },
@@ -59,9 +22,5 @@
   },
   "engines": {
     "dsh": ">=0.2.1-rc.1"
-  },
-  "publishConfig": {
-    "access": "public",
-    "registry": "https://registry.npmjs.org/"
   }
 }

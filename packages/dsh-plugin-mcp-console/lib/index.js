@@ -11,7 +11,7 @@
  *
  * Surface wiring uses dynamic `ctx.inject(...)` scopes rather than a static
  * `inject` export: on a host without the web profile (no webServer) the
- * plugin stays dormant instead of blocking the whole dsh-pouch bundle. The
+ * plugin stays dormant instead of blocking the host. The
  * same mechanism powers the settings-GUI master switches (borrowed from
  * dsh-skills-mcp-manager): `enabled` tears the composition (routes + MCP
  * fibers) up and down live, `announceToAgent` toggles the model-facing

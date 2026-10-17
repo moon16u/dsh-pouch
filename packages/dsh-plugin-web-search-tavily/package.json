@@ -1,6 +1,6 @@
 {
   "name": "@moon16u/dsh-plugin-web-search-tavily",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Tavily-backed search provider for the DeepSeek Harness web capability seam (ctx.web)",
   "type": "module",
   "main": "lib/index.js",
@@ -40,6 +40,11 @@
     "test": "node --test test/*.test.mjs"
   },
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/moon16u/dsh-pouch.git",
+    "directory": "packages/dsh-plugin-web-search-tavily"
+  },
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"

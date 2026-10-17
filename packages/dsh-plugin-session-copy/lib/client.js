@@ -6,7 +6,7 @@ window.__ModuleLoader__.load({
     Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
     var React = require("react");
     var primitives = require("@deepseek-ai/dsh-client-ui-primitives");
-    // ==== session-copy client body (keep in sync with dsh-pouch/lib/client.js) ====
+    // ==== session-copy client body ====
     var Menu = primitives.Menu;
     var IconCopyOutline16 = primitives.IconCopyOutlineRegular || primitives.IconCopyOutline16;
     var IconCheckOutline16 = primitives.IconCheckOutlineRegular || primitives.IconCheckOutline16;

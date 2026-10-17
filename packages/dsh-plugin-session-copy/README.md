@@ -14,19 +14,13 @@ Copy the current session's title, storage directory, or working directory from t
 
 ## Installation
 
-Ships inside the [`@moon16u/dsh-pouch`](../../README.md) bundle (recommended):
-
-```bash
-dsh plugin --profile web add @moon16u/dsh-pouch
-```
-
-Or install this plugin standalone:
+Install this plugin as its own DSH bundle:
 
 ```bash
 dsh plugin --profile web add @moon16u/dsh-plugin-session-copy
 ```
 
-Either way, **restart `dsh web` once** after installing. No manual `cordis.patch.yml` edits needed — the package carries its own patch.
+**Restart `dsh web` once** after installing. No manual `cordis.patch.yml` edits needed — the package carries its own patch.
 
 ## Host route
 

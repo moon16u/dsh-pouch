@@ -9,7 +9,6 @@ import { Store } from "../lib/store.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..");
-const pouchRoot = join(root, "..", "..");
 
 test("host entry exports the cordis plugin face", async () => {
   const mod = await import("../lib/index.js");
@@ -88,27 +87,6 @@ test("client bundle is a ModuleLoader payload registering the settings section",
   assert.doesNotMatch(source, /react-dom/);
 });
 
-test("client body is synced verbatim into the dsh-pouch root bundle", async () => {
-  const standalone = await readFile(join(root, "lib/client.js"), "utf8");
-  const rootBundle = await readFile(join(pouchRoot, "lib/client.js"), "utf8");
-  const START = "// ==== mcp-console client body";
-  const END = "// ==== end mcp-console client body ====";
-  function body(text) {
-    const a = text.indexOf(START);
-    const b = text.indexOf(END);
-    assert.ok(a !== -1 && b !== -1 && b > a, "sync markers missing");
-    return text.slice(a, b + END.length);
-  }
-  assert.equal(body(standalone), body(rootBundle));
-  // root-only wiring must call the console apply
-  assert.match(rootBundle, /mcpConsoleApply\(ctx\);/);
-});
-
-test("root client bundle has no stray react-dom require", async () => {
-  const rootBundle = await readFile(join(pouchRoot, "lib/client.js"), "utf8");
-  assert.doesNotMatch(rootBundle, /require\("react-dom"\)/);
-});
-
 test("package.json points to runtime bundles", async () => {
   const pkg = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
   assert.equal(pkg.name, "@moon16u/dsh-plugin-mcp-console");
@@ -121,18 +99,6 @@ test("package.json points to runtime bundles", async () => {
   assert.ok(pkg.files.includes("cordis.patch.yml"));
   const patch = await readFile(join(root, "cordis.patch.yml"), "utf8");
   assert.match(patch, /@moon16u\/dsh-plugin-mcp-console/);
-});
-
-test("pouch root registers the mcp-console host plugin", async () => {
-  const source = await readFile(join(pouchRoot, "lib/index.js"), "utf8");
-  assert.match(source, /packages\/dsh-plugin-mcp-console\/lib\/index\.js/);
-  assert.match(source, /ctx\.plugin\(mcpConsole\)/);
-});
-
-test("pouch root package.json exports mcp-console subpaths", async () => {
-  const pkg = JSON.parse(await readFile(join(pouchRoot, "package.json"), "utf8"));
-  assert.equal(pkg.exports["./mcp-console"], "./packages/dsh-plugin-mcp-console/lib/index.js");
-  assert.equal(pkg.exports["./mcp-console/client"], "./packages/dsh-plugin-mcp-console/lib/client.js");
 });
 
 test("resolveMcpClient finds the official client from a profile tree", { skip: process.env.DSH_PROFILE_CLIENT_TEST === "0" }, async () => {

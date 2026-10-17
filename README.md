@@ -7,12 +7,11 @@
 **English** | [中文](./README.zh-CN.md)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![npm](https://img.shields.io/npm/v/@moon16u/dsh-pouch.svg?color=cb3837)](https://www.npmjs.com/package/@moon16u/dsh-pouch)
-[![DeepSeek Harness](https://img.shields.io/badge/DSH-0.1.7--rc.2-purple.svg)](https://github.com/deepseek-ai/deepseek-harness)
+[![DeepSeek Harness](https://img.shields.io/badge/DSH-0.2.1--rc.1-purple.svg)](https://github.com/deepseek-ai/deepseek-harness)
 [![pnpm workspace](https://img.shields.io/badge/pnpm-workspace-orange.svg)](https://pnpm.io/workspaces)
 
-> **dsh-pouch** is a pocket toolkit of practical, lightweight, and beautiful plugins designed for [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness).  
-> It delivers out-of-the-box micro-extensions to enhance your daily workflow, interactive experience, and development productivity.
+> **dsh-pouch** is a monorepo of five independent, standalone [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) plugins.
+> The repository root is only a pnpm workspace — it is **not** a DSH bundle, not installable, and never published to npm. Install only the plugins you need.
 
 ---
 
@@ -28,34 +27,38 @@
 
 ---
 
-## 🚀 Quick Start & Installation
+## 🚀 Installation
 
-### Method 1: One-Command Installation via DSH CLI (Recommended ⭐️⭐️⭐️⭐️⭐️)
-
-Run a single command in your terminal. DSH will automatically download, bundle-register, and mount all 5 pocket plugins (zero manual configuration):
+Each plugin is its own DSH bundle with its own npm package and version. Install exactly the ones you want:
 
 ```bash
-# 1. Install the entire toolkit via npm (recommended)
-dsh plugin --profile web add @moon16u/dsh-pouch
-
-# Or install directly from GitHub
-dsh plugin --profile web add https://github.com/moon16u/dsh-pouch.git
+dsh plugin --profile web add @moon16u/dsh-plugin-restart
+dsh plugin --profile web add @moon16u/dsh-plugin-current-time
+dsh plugin --profile web add @moon16u/dsh-plugin-session-copy
+dsh plugin --profile web add @moon16u/dsh-plugin-web-search-tavily
+dsh plugin --profile web add @moon16u/dsh-plugin-mcp-console
 ```
 
----
+**Restart `dsh web` once** after installing (bundle layers compose at startup). No manual `cordis.patch.yml` edits are needed — every package carries its own patch.
 
-### Method 2: Local Git Clone Installation
+`web-search-tavily` registers the provider but does not select it. To make Tavily the active search provider, add the one-line `web` override documented in [its README](./packages/dsh-plugin-web-search-tavily/README.md).
 
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/moon16u/dsh-pouch.git ~/dsh-pouch
-   ```
+### From a local checkout
 
-2. **Add the bundle to your DSH profile**:
-   ```bash
-   dsh plugin --profile web add file:~/dsh-pouch
-   ```
-   *DSH automatically detects `dsh.bundle` and applies the built-in `cordis.patch.yml` layer without manual configuration file edits.*
+```bash
+git clone https://github.com/moon16u/dsh-pouch.git ~/dsh-pouch
+dsh plugin --profile web add file:~/dsh-pouch/packages/dsh-plugin-restart
+```
+
+### Migrating from the old all-in-one bundle
+
+`@moon16u/dsh-pouch` used to be a single bundle that loaded all five plugins. The last bundle release is **0.7.3**, now deprecated and no longer updated. If your profile still depends on it, remove it **before** installing the individual packages:
+
+```bash
+dsh plugin --profile web remove @moon16u/dsh-pouch
+```
+
+Do not keep the old bundle and the standalone packages installed together — both load the same plugins, which duplicates the restart commands, the settings cards, and the MCP console.
 
 ---
 

@@ -1,6 +1,6 @@
 {
   "name": "@moon16u/dsh-plugin-restart",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "Schedule a detached DSH restart from inside DSH via /dsh-restart command or dsh_restart agent tool",
   "type": "module",
   "main": "lib/index.js",
@@ -51,6 +51,11 @@
     "test": "node --test test/*.test.mjs"
   },
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/moon16u/dsh-pouch.git",
+    "directory": "packages/dsh-plugin-restart"
+  },
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"

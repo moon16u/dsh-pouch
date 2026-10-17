@@ -6,7 +6,7 @@ window.__ModuleLoader__.load({
     Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
     var React = require("react");
 
-    // ==== mcp-console client body (synced; keep identical to dsh-pouch/lib/client.js) ====
+    // ==== mcp-console client body ====
 
     var McpIcons = require("@deepseek-ai/dsh-client-ui-primitives");
     var IconRefresh = McpIcons.IconRefreshOutlineRegular || McpIcons.IconRefreshOutline16;
@@ -19,8 +19,7 @@ window.__ModuleLoader__.load({
 
     // ---------------------------------------------------------------------------
     // mcp-console client: an "MCP" settings section (mcp-manager-gui-spec.md)
-    // over /api/dsh-mcp-console/*. All identifiers carry an Mcp/mcp prefix so
-    // this body can be pasted verbatim into the dsh-pouch root client bundle.
+    // over /api/dsh-mcp-console/*. All identifiers carry an Mcp/mcp prefix.
     // ---------------------------------------------------------------------------
 
     var McpNS = "mcp-console";

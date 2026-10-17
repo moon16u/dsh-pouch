@@ -1,6 +1,6 @@
 {
   "name": "@moon16u/dsh-plugin-current-time",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Inject the host's current date and time into agent context at the start of every turn",
   "type": "module",
   "main": "lib/index.js",
@@ -34,6 +34,11 @@
     "test": "node --test test/*.test.mjs"
   },
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/moon16u/dsh-pouch.git",
+    "directory": "packages/dsh-plugin-current-time"
+  },
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"

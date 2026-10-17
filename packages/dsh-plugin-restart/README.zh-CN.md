@@ -13,19 +13,13 @@
 
 ## 安装
 
-随 [`@moon16u/dsh-pouch`](../../README.zh-CN.md) 套件安装（推荐）：
-
-```bash
-dsh plugin --profile web add @moon16u/dsh-pouch
-```
-
-或独立安装本插件：
+独立安装本插件：
 
 ```bash
 dsh plugin --profile web add @moon16u/dsh-plugin-restart
 ```
 
-两种方式安装后都需**重启一次 `dsh web`**（bundle 层只在启动时组合）。无需手改 `cordis.patch.yml`——包内自带挂载补丁。
+安装后需**重启一次 `dsh web`**（bundle 层只在启动时组合）。无需手改 `cordis.patch.yml`——包内自带挂载补丁。
 
 ## 测试
 ```bash

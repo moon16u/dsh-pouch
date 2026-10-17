@@ -66,21 +66,6 @@ async function loadBundle(sourcePath, react) {
   return bundle;
 }
 
-test("root bundle McpSection renders without crashing", { skip: !existsSync(reactPath) || !existsSync(reactDomPath) }, async () => {
-  const { react, reactDomServer } = loadReactModules();
-  const bundle = await loadBundle(join(pouchRoot, "lib", "client.js"), react);
-  assert.equal(typeof bundle.McpSection, "function");
-  const t = (key) => `zh:${key}`;
-  const element = react.createElement(bundle.McpSection, { t });
-  const html = reactDomServer.renderToStaticMarkup(element);
-  // the header must render (title, refresh/add buttons) — a ReferenceError
-  // inside the body would throw here instead
-  assert.match(html, /zh:title/);
-  assert.match(html, /zh:add/);
-  assert.match(html, /zh:loadingData/);
-  assert.match(html, /data-mcp-console-section/);
-});
-
 test("standalone bundle McpSection renders without crashing", { skip: !existsSync(reactPath) || !existsSync(reactDomPath) }, async () => {
   const { react, reactDomServer } = loadReactModules();
   const bundle = await loadBundle(join(here, "..", "lib", "client.js"), react);

@@ -1,6 +1,6 @@
 {
   "name": "@moon16u/dsh-plugin-mcp-console",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Web GUI console for MCP servers: manages the official @deepseek-ai/dsh-mcp-client at runtime — add/edit/enable/disable/reconnect/delete servers, live status, mcpServers JSON import. No MCP protocol code: connection and tool registration are 100% the official client, resolved from the running DSH profile.",
   "type": "module",
   "main": "lib/index.js",
@@ -61,10 +61,14 @@
     }
   },
   "scripts": {
-    "test": "node --test test/*.test.mjs",
-    "sync-root-client": "node scripts/sync-root-client.mjs"
+    "test": "node --test test/*.test.mjs"
   },
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/moon16u/dsh-pouch.git",
+    "directory": "packages/dsh-plugin-mcp-console"
+  },
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
