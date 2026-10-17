@@ -1,6 +1,6 @@
 {
   "name": "@moon16u/dsh-plugin-session-copy",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Copy the current session's title, storage directory, or working directory from the web session header",
   "type": "module",
   "main": "lib/index.js",
