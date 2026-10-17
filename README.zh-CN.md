@@ -22,7 +22,7 @@
 | :--- | :--- | :--- |
 | **[`@moon16u/dsh-plugin-restart`](./packages/dsh-plugin-restart)** | Host / Web UI | 提供 `/restart` 与 `/dsh-restart` 命令、原生 `🔄 重启` 候选菜单与 `dsh_restart` Agent 工具，实现进程分离的安全 3 秒平滑重启。 |
 | **[`@moon16u/dsh-plugin-current-time`](./packages/dsh-plugin-current-time)** | Host / Agent | 每轮对话开始时向 Agent 上下文注入宿主机的真实日期、时间与时区，长会话跨天也不会再按旧日期推理。 |
-| **[`@moon16u/dsh-plugin-session-id`](./packages/dsh-plugin-session-id)** | Web UI | Web 会话顶栏的原生风格「复制」菜单：会话标题、会话目录路径、工作目录。 |
+| **[`@moon16u/dsh-plugin-session-copy`](./packages/dsh-plugin-session-copy)** | Web UI | Web 会话顶栏的原生风格「复制」菜单：会话标题、会话目录路径、工作目录。 |
 | **[`@moon16u/dsh-plugin-web-search-tavily`](./packages/dsh-plugin-web-search-tavily)** | Capability Seam | 基于 Tavily REST API 的真实网络搜索提供方，无缝接入 DSH 官方 `ctx.web` 网络能力标准。 |
 | **[`@moon16u/dsh-plugin-mcp-console`](./packages/dsh-plugin-mcp-console)** | Web UI + Host | 设置页「MCP 服务器」控制台：运行时增删改/启停/重连、工具级开关、SSE 实时状态、mcpServers JSON 导入。零 MCP 协议代码——全部复用官方 `@deepseek-ai/dsh-mcp-client`；profile YAML 里的 MCP 条目在启动/刷新时自动移植为动态管理（可逆回写）。 |
 
@@ -69,7 +69,7 @@ dsh plugin --profile web add https://github.com/moon16u/dsh-pouch.git
 * **痛点**：模型自己没有时钟，只能沿用启动时注入的那一次"今天"。会话跨过午夜后它仍按昨天的日期推理，而对话里没有任何东西会纠正它。
 * **方案**：挂载 `agent/pre-step`，在每轮第一步的提问之后追加一条真实时刻读数。按轮而非按步注入，工具调用循环不会把对话刷满几乎相同的时间戳。
 
-### 3. `@moon16u/dsh-plugin-session-id`
+### 3. `@moon16u/dsh-plugin-session-copy`
 * **痛点**：想拿到当前会话的存储目录、标题或工作目录，只能去翻 URL、控制台日志或手工找文件系统。
 * **解决**：在 Web 顶栏工具区注入原生风格的「复制」按钮，点开是一个三项菜单——**会话标题**、**会话目录**（会话真实存储文件夹路径）、**工作目录**；某项取值尚不存在时该项禁用并说明原因。目录由宿主侧唯一一个认证只读路由基于 JSONL 后端的公开 `resolveCurrentLog` 解析，复制的是纯路径，仅定位当前格式日志，不读取日志内容，也不取写租约；空返回可能表示尚未落盘或日志格式不受支持，旧代际暂不可定位。
 

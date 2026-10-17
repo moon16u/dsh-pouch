@@ -1,12 +1,12 @@
 /**
- * Host-side entry for @moon16u/dsh-plugin-session-id.
+ * Host-side entry for @moon16u/dsh-plugin-session-copy.
  *
  * The browser half stays UI-only (the Session ID is supplied by the DSH
  * client runtime). This host half adds exactly one authenticated, read-only
  * route so the header menu can reveal where the current Session is stored on
  * disk:
  *
- *   GET /api/dsh-session-id/directory?sessionId=<id>
+ *   GET /api/dsh-session-copy/directory?sessionId=<id>
  *     -> 200 {ok:true, directory}        resolved session directory path
  *     -> 400 validation failure          (missing / empty id)
  *     -> 404 directory unavailable       (unwritten or unsupported log format)
@@ -30,7 +30,7 @@
 import { dirname, sep } from "node:path";
 
 /** Authenticated route serving the on-disk directory of one Session. */
-export const SESSION_ID_DIRECTORY_PATH = "/api/dsh-session-id/directory";
+export const SESSION_COPY_DIRECTORY_PATH = "/api/dsh-session-copy/directory";
 
 /** JSON headers shared by every response of this route. */
 const JSON_HEADERS = {
@@ -48,7 +48,7 @@ export function apply(ctx) {
 			const connection = connectionOf(scope) ?? connectionOf(ctx);
 			if (typeof connection?.fetch?.register !== "function") return () => {};
 			const dispose = connection.fetch.register({
-				path: SESSION_ID_DIRECTORY_PATH,
+				path: SESSION_COPY_DIRECTORY_PATH,
 				methods: ["GET"],
 				requestBody: "buffered",
 				fetch: async (request) => sessionDirectoryResponse(scope, request)
@@ -56,7 +56,7 @@ export function apply(ctx) {
 			return () => {
 				if (typeof dispose === "function") dispose();
 			};
-		}, "session-id: directory route");
+		}, "session-copy: directory route");
 	});
 }
 

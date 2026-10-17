@@ -1,20 +1,20 @@
 window.__ModuleLoader__.load({
-  id: "@moon16u/dsh-plugin-session-id",
+  id: "@moon16u/dsh-plugin-session-copy",
   factory: (require) => {
     var module = { exports: {} };
     var exports = module.exports;
     Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
     var React = require("react");
     var primitives = require("@deepseek-ai/dsh-client-ui-primitives");
-    // ==== session-id client body (keep in sync with dsh-pouch/lib/client.js) ====
+    // ==== session-copy client body (keep in sync with dsh-pouch/lib/client.js) ====
     var Menu = primitives.Menu;
     var IconCopyOutline16 = primitives.IconCopyOutlineRegular || primitives.IconCopyOutline16;
     var IconCheckOutline16 = primitives.IconCheckOutlineRegular || primitives.IconCheckOutline16;
 
-    var NS = "session-id";
+    var NS = "session-copy";
 
     /** Document-relative route served by this package's host half. */
-    var DIRECTORY_ROUTE = "api/dsh-session-id/directory";
+    var DIRECTORY_ROUTE = "api/dsh-session-copy/directory";
 
     /** Menu item ids: one per copyable value. */
     var DIRECTORY_ITEM = "directory";
@@ -53,12 +53,12 @@ window.__ModuleLoader__.load({
       "directoryPending": "Loading the session directory",
     };
 
-    var css = ".dsh-session-id-copy{border:1px solid var(--dsw-alias-border-l2);min-width:64px;height:32px;color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family);cursor:pointer;background:0 0;border-radius:18px;justify-content:center;align-items:center;gap:4px;padding:6px 12px;font-size:13px;font-weight:400;line-height:20px;display:inline-flex}.dsh-session-id-copy:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}.dsh-session-id-copy:disabled{color:var(--dsw-alias-label-dimmed);cursor:wait}.dsh-session-id-copy span,.dsh-session-id-copy svg{flex:none}.dsh-session-id-copy span{white-space:nowrap}.dsh-session-id-menu-hint{display:block}.dsh-session-id-menu-reason{color:var(--dsw-alias-label-dimmed);font-size:11px;line-height:16px}.dsh-session-id-status{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}";
+    var css = ".dsh-session-copy-copy{border:1px solid var(--dsw-alias-border-l2);min-width:64px;height:32px;color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family);cursor:pointer;background:0 0;border-radius:18px;justify-content:center;align-items:center;gap:4px;padding:6px 12px;font-size:13px;font-weight:400;line-height:20px;display:inline-flex}.dsh-session-copy-copy:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}.dsh-session-copy-copy:disabled{color:var(--dsw-alias-label-dimmed);cursor:wait}.dsh-session-copy-copy span,.dsh-session-copy-copy svg{flex:none}.dsh-session-copy-copy span{white-space:nowrap}.dsh-session-copy-menu-hint{display:block}.dsh-session-copy-menu-reason{color:var(--dsw-alias-label-dimmed);font-size:11px;line-height:16px}.dsh-session-copy-status{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}";
 
-    if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=\"@moon16u/dsh-plugin-session-id/SessionIdAction.module.css\"]") === null) {
+    if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=\"@moon16u/dsh-plugin-session-copy/SessionCopyAction.module.css\"]") === null) {
       var tag = document.createElement("style");
-      tag.dataset.plugin = "@moon16u/dsh-plugin-session-id";
-      tag.dataset.pluginCss = "@moon16u/dsh-plugin-session-id/SessionIdAction.module.css";
+      tag.dataset.plugin = "@moon16u/dsh-plugin-session-copy";
+      tag.dataset.pluginCss = "@moon16u/dsh-plugin-session-copy/SessionCopyAction.module.css";
       tag.textContent = css;
       document.head.appendChild(tag);
     }
@@ -148,9 +148,9 @@ window.__ModuleLoader__.load({
       var values = copyValuesFor(summary, directory);
       function row(id, label, hint) {
         var disabled = typeof values[id] !== "string";
-        var children = [React.createElement("span", { className: "dsh-session-id-menu-hint", key: "label" }, label)];
+        var children = [React.createElement("span", { className: "dsh-session-copy-menu-hint", key: "label" }, label)];
         if (disabled && hint) {
-          children.push(React.createElement("span", { className: "dsh-session-id-menu-reason", key: "reason" }, hint));
+          children.push(React.createElement("span", { className: "dsh-session-copy-menu-reason", key: "reason" }, hint));
         }
         return { id: id, label: React.createElement("span", null, children), disabled: disabled };
       }
@@ -169,7 +169,7 @@ window.__ModuleLoader__.load({
       if (!await primitives.writeClipboard(text)) throw new Error("clipboard write failed");
     }
 
-    function SessionIdAction(props) {
+    function SessionCopyAction(props) {
       var sessionId = props.sessionId;
       var t = props.t;
       var useSessions = props.useSessions;
@@ -288,7 +288,7 @@ window.__ModuleLoader__.load({
         } catch (error) {
           nextFeedback = "copyFailed";
           if (typeof console !== "undefined" && console.error) {
-            console.error("[dsh-session-id] copy failed", error);
+            console.error("[dsh-session-copy] copy failed", error);
           }
         }
         if (!mountedRef.current || token !== sessionSeqRef.current) return;
@@ -301,12 +301,12 @@ window.__ModuleLoader__.load({
 
       var trigger = React.createElement("button", {
         type: "button",
-        "data-session-id-copy": "",
+        "data-session-copy-copy": "",
         "aria-label": label,
         "aria-haspopup": "menu",
         "aria-expanded": open ? "true" : "false",
         title: label,
-        className: "dsh-session-id-copy",
+        className: "dsh-session-copy-copy",
         onClick: function () { setOpen(!open); },
       },
         React.createElement("span", null, label),
@@ -326,36 +326,38 @@ window.__ModuleLoader__.load({
           onClose: function () { setOpen(false); },
         }),
         React.createElement("span", {
-          className: "dsh-session-id-status",
+          className: "dsh-session-copy-status",
           role: "status",
           "aria-live": "polite",
         }, feedback === "" ? "" : t(feedback)));
     }
-    // ==== end session-id client body ====
+    var SessionIdAction = SessionCopyAction;
+    // ==== end session-copy client body ====
 
 
-    // ==== session-id apply (keep in sync) ====
+    // ==== session-copy apply (keep in sync) ====
     var inject = ["slots", "locale"];
 
     function apply(ctx) {
       ctx.effect(function () {
         return ctx.locale.register(NS, { zh: zh, en: en });
-      }, "dsh-session-id: dictionaries");
+      }, "dsh-session-copy: dictionaries");
 
       ctx.slots.inject("conversation.session.header.utilities", function () {
         return ctx.slots.register({
           name: "conversation.session.header.utilities",
-          id: "dsh-session-id",
+          id: "dsh-session-copy",
           order: -1,
           locale: NS,
-        }, SessionIdAction);
+        }, SessionCopyAction);
       });
     }
 
 
-    // ==== end session-id apply ====
+    // ==== end session-copy apply ====
 
-    exports.SessionIdAction = SessionIdAction;
+    exports.SessionCopyAction = SessionCopyAction;
+    exports.SessionIdAction = SessionCopyAction;
     exports.buildMenuEntries = buildMenuEntries;
     exports.copyValuesFor = copyValuesFor;
     exports.copyText = copyText;

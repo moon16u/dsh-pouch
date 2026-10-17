@@ -10,15 +10,15 @@ const root = join(here, "..");
 test("host entry exports the directory route surface", async () => {
   const mod = await import("../lib/index.js");
   assert.equal(typeof mod.apply, "function");
-  assert.equal(mod.SESSION_ID_DIRECTORY_PATH, "/api/dsh-session-id/directory");
+  assert.equal(mod.SESSION_COPY_DIRECTORY_PATH, "/api/dsh-session-copy/directory");
 });
 
-test("client bundle is a ModuleLoader payload for dsh-session-id", async () => {
+test("client bundle is a ModuleLoader payload for dsh-session-copy", async () => {
   const source = await readFile(join(root, "lib/client.js"), "utf8");
   assert.match(source, /window\.__ModuleLoader__\.load\(\{/);
-  assert.match(source, /id:\s*"@moon16u\/dsh-plugin-session-id"/);
+  assert.match(source, /id:\s*"@moon16u\/dsh-plugin-session-copy"/);
   assert.match(source, /"conversation\.session\.header\.utilities"/);
-  assert.match(source, /"dsh-session-id"/);
+  assert.match(source, /"dsh-session-copy"/);
 });
 
 test("client bundle copies the menu values rather than the raw session id", async () => {
@@ -42,20 +42,20 @@ test("client bundle reuses the shared Menu with accessible menu semantics", asyn
   assert.match(source, /aria-haspopup":\s*"menu"/);
   assert.match(source, /aria-expanded/);
   assert.match(source, /aria-live":\s*"polite"/);
-  assert.match(source, /api\/dsh-session-id\/directory/);
+  assert.match(source, /api\/dsh-session-copy\/directory/);
 });
 
 test("client bundle keeps the Session log button styling", async () => {
   const source = await readFile(join(root, "lib/client.js"), "utf8");
   assert.match(source, /height:32px/);
   assert.match(source, /border-radius:18px/);
-  assert.match(source, /dsh-session-id-copy/);
+  assert.match(source, /dsh-session-copy-copy/);
   assert.match(source, /--dsw-alias-label-primary/);
 });
 
 test("package.json points to runtime bundles", async () => {
   const pkg = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
-  assert.equal(pkg.name, "@moon16u/dsh-plugin-session-id");
+  assert.equal(pkg.name, "@moon16u/dsh-plugin-session-copy");
   assert.equal(pkg.exports["."].default, "./lib/index.js");
   assert.equal(pkg.exports["./client"].default, "./lib/client.js");
 });

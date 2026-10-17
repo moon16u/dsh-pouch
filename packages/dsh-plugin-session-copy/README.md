@@ -1,4 +1,4 @@
-# @moon16u/dsh-plugin-session-id
+# @moon16u/dsh-plugin-session-copy
 
 **English** | [中文](./README.zh-CN.md)
 
@@ -23,14 +23,14 @@ dsh plugin --profile web add @moon16u/dsh-pouch
 Or install this plugin standalone:
 
 ```bash
-dsh plugin --profile web add @moon16u/dsh-plugin-session-id
+dsh plugin --profile web add @moon16u/dsh-plugin-session-copy
 ```
 
 Either way, **restart `dsh web` once** after installing. No manual `cordis.patch.yml` edits needed — the package carries its own patch.
 
 ## Host route
 
-`GET /api/dsh-session-id/directory?sessionId=<id>` — authenticated by the connection
+`GET /api/dsh-session-copy/directory?sessionId=<id>` — authenticated by the connection
 service, read-only, `no-store`. It resolves the stored log through the JSONL persistence
 backend's public `resolveCurrentLog(id, signal)` and returns
 `{ok:true, directory}` (a plain filesystem path). This API only locates current-format

@@ -1,6 +1,6 @@
 /**
  * Tests for the host-side session-directory route of
- * @moon16u/dsh-plugin-session-id.
+ * @moon16u/dsh-plugin-session-copy.
  *
  * Every case runs against a fake cordis context: no DSH process, no real
  * ~/.dsh access, no temp files, no network.
@@ -13,9 +13,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { dirname as posixDirname, win32 } from "node:path";
-import { apply, SESSION_ID_DIRECTORY_PATH } from "../lib/index.js";
+import { apply, SESSION_COPY_DIRECTORY_PATH } from "../lib/index.js";
 
-const ROUTE_URL = "http://localhost/api/dsh-session-id/directory";
+const ROUTE_URL = "http://localhost/api/dsh-session-copy/directory";
 
 /**
  * Build a fake cordis context recording injections, effects and route
@@ -88,7 +88,7 @@ test("registers the directory route only after the connection is injected", () =
 	apply(fake.ctx);
 	assert.deepEqual(fake.injectCalls, [["connection"]]);
 	assert.equal(fake.registrations.length, 1);
-	assert.equal(fake.registrations[0].options.path, SESSION_ID_DIRECTORY_PATH);
+	assert.equal(fake.registrations[0].options.path, SESSION_COPY_DIRECTORY_PATH);
 	assert.deepEqual(fake.registrations[0].options.methods, ["GET"]);
 	assert.equal(fake.registrations[0].options.requestBody, "buffered");
 	assert.equal(typeof fake.registrations[0].options.fetch, "function");

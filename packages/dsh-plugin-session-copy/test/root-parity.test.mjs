@@ -31,16 +31,16 @@ async function readSection(path, startMarker, endMarker, { fromRoot, stripTraili
   return fromRoot ? text.split("_uiPrimitives.").join("primitives.") : text;
 }
 
-const BODY = ["==== session-id client body", "==== end session-id client body"];
-const APPLY = ["==== session-id apply", "==== end session-id apply"];
+const BODY = ["==== session-copy client body", "==== end session-copy client body"];
+const APPLY = ["==== session-copy apply", "==== end session-copy apply"];
 
-test("root bundle and package bundle expose the same session-id body", async () => {
+test("root bundle and package bundle expose the same session-copy body", async () => {
   const fromPackage = await readSection(join(packageRoot, "lib/client.js"), BODY[0], BODY[1], { fromRoot: false });
   const fromRoot = await readSection(join(pouchRoot, "lib/client.js"), BODY[0], BODY[1], { fromRoot: true });
   assert.equal(fromRoot, fromPackage, "the inlined body must match this package byte for byte");
 });
 
-test("root bundle and package bundle expose the same session-id registration", async () => {
+test("root bundle and package bundle expose the same session-copy registration", async () => {
   const fromPackage = await readSection(join(packageRoot, "lib/client.js"), APPLY[0], APPLY[1], { fromRoot: false });
   const fromRoot = await readSection(join(pouchRoot, "lib/client.js"), APPLY[0], APPLY[1], { fromRoot: true });
   // The root apply() body continues into sibling plugins, so its copy of this

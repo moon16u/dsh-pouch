@@ -253,7 +253,7 @@ async function createHarness(options = {}) {
 test("dictionaries expose the copy menu labels in both languages", async () => {
   const harness = await createHarness();
   try {
-    assert.equal(harness.registered.ns, "session-id");
+    assert.equal(harness.registered.ns, "session-copy");
     assert.deepEqual(
       ["label", "directory", "title", "cwd", "copied", "copyFailed"].map((k) => harness.registered.dicts.zh[k]),
       ["复制", "会话目录", "会话标题", "工作目录", "已复制", "复制失败"],
@@ -311,7 +311,7 @@ test("trigger is a menu button labelled 复制 with correct aria state", async (
     assert.equal(trigger.type, "button");
     assert.equal(trigger.props["aria-haspopup"], "menu");
     assert.equal(trigger.props["aria-expanded"], "false");
-    assert.equal(trigger.props["data-session-id-copy"], "");
+    assert.equal(trigger.props["data-session-copy-copy"], "");
     assert.equal(trigger.props["aria-label"], "复制");
     findOne(trigger, (el) => el.props && el.props.children === "复制");
   } finally {
@@ -328,7 +328,7 @@ test("opening the menu lazily loads the session directory once", async () => {
     assert.equal(harness.fetchCalls.length, 1, "one request per open");
     assert.equal(harness.fetchCalls[0].init.method, "GET");
     assert.equal(harness.fetchCalls[0].init.credentials, "same-origin");
-    assert.equal(harness.fetchCalls[0].url, "api/dsh-session-id/directory?sessionId=session-1");
+    assert.equal(harness.fetchCalls[0].url, "api/dsh-session-copy/directory?sessionId=session-1");
     assert.equal(harness.menu.props.open, true);
     assert.deepEqual(harness.menu.props.items.map((item) => item.disabled), [false, false, false]);
     assert.equal(harness.menu.props.anchor.props["aria-expanded"], "true");
@@ -697,11 +697,11 @@ test("directory requests encode opaque ids without changing their decoded value"
 test("bundle exports the documented surface", async () => {
   const harness = await createHarness();
   try {
-    for (const name of ["SessionIdAction", "apply", "buildMenuEntries", "copyValuesFor", "copyText", "requestDirectory", "directoryRequestUrl"]) {
+    for (const name of ["SessionCopyAction", "SessionIdAction", "apply", "buildMenuEntries", "copyValuesFor", "copyText", "requestDirectory", "directoryRequestUrl"]) {
       assert.equal(typeof harness.bundle[name], "function", `${name} must be exported`);
     }
     assert.deepEqual(harness.bundle.inject, ["slots", "locale"]);
-    assert.equal(harness.bundle.DIRECTORY_ROUTE, "api/dsh-session-id/directory");
+    assert.equal(harness.bundle.DIRECTORY_ROUTE, "api/dsh-session-copy/directory");
   } finally {
     harness.restore();
   }

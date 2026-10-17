@@ -1,4 +1,4 @@
-# @moon16u/dsh-plugin-session-id
+# @moon16u/dsh-plugin-session-copy
 
 [English](./README.md) | **中文**
 
@@ -23,14 +23,14 @@ dsh plugin --profile web add @moon16u/dsh-pouch
 或独立安装本插件：
 
 ```bash
-dsh plugin --profile web add @moon16u/dsh-plugin-session-id
+dsh plugin --profile web add @moon16u/dsh-plugin-session-copy
 ```
 
 两种方式安装后都需**重启一次 `dsh web`**。无需手改 `cordis.patch.yml`——包内自带挂载补丁。
 
 ## 宿主路由
 
-`GET /api/dsh-session-id/directory?sessionId=<id>`——由 connection 服务认证，只读，`no-store`。
+`GET /api/dsh-session-copy/directory?sessionId=<id>`——由 connection 服务认证，只读，`no-store`。
 它通过 JSONL 持久化后端的公开 `resolveCurrentLog(id, signal)` 定位日志，返回
 `{ok:true, directory}`（纯文件系统路径）。该接口仅定位当前格式日志，旧代际日志暂不能通过此菜单复制目录；
 空返回无法区分尚未落盘与日志格式不受支持。不读取日志内容，不做 flush、迁移，也不取写租约。

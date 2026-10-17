@@ -67,12 +67,14 @@ export function resolveConfig(value, storedConfig) {
  * settings page instead of hand-edited config files.
  */
 const SYSTEM_PROMPT_GUIDANCE =
-  "本机已安装 MCP 控制台插件(dsh-plugin-mcp-console):DSH Web 设置页「MCP 服务器」分区可管理全部 MCP 服务器——" +
-  "新增/编辑/删除、启用/停用、逐工具开关、mcpServers JSON 导入、连接测试。启用的服务器经官方 " +
-  "@deepseek-ai/dsh-mcp-client 真实连接,工具名为 mcp__<服务器名>__<工具名>;被逐工具停用的工具仍会出现在工具" +
-  "列表中,但调用会被拒绝并提示去设置页开启。配置由插件持久化在 ~/.dsh/dsh-mcp.json,无需也不应手改 " +
-  "cordis.patch.yml。用户提到「MCP 服务器 / MCP 管理 / 导入 MCP / 测试 MCP 连接」时,引导其到设置页的 " +
-  "「MCP 服务器」分区操作。";
+  "An MCP console plugin (dsh-plugin-mcp-console) is installed on this machine: the \"MCP Servers\" " +
+  "section of the DSH Web settings page manages all MCP servers — add/edit/delete, enable/disable, " +
+  "per-tool toggles, mcpServers JSON import, and connection testing. Enabled servers connect for real " +
+  "via the official @deepseek-ai/dsh-mcp-client, with tools named mcp__<server>__<tool>; tools disabled " +
+  "per-tool still appear in the tool list, but calls are rejected with a hint to enable them in the " +
+  "settings page. The plugin persists its config in ~/.dsh/dsh-mcp.json — no need to hand-edit, and do " +
+  "not hand-edit, cordis.patch.yml. When the user mentions \"MCP servers / MCP management / import MCP / " +
+  "test MCP connection\", guide them to the \"MCP Servers\" section of the settings page.";
 
 /** System-prompt band this announcement sits in (after plugin guidance basics). */
 const ANNOUNCEMENT_ORDER = 160;

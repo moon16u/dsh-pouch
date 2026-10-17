@@ -1,7 +1,7 @@
 {
-  "name": "@moon16u/dsh-plugin-session-id",
-  "version": "0.3.2",
-  "description": "Show current DSH session ID in the web session header and copy it with one click",
+  "name": "@moon16u/dsh-plugin-session-copy",
+  "version": "0.4.0",
+  "description": "Copy the current session's title, storage directory, or working directory from the web session header",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",

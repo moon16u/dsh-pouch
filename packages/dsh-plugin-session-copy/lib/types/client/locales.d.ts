@@ -1,5 +1,5 @@
-export declare const NS = "session-id";
-export type SessionIdKey =
+export declare const NS = "session-copy";
+export type SessionCopyKey =
   | "label"
   | "copied"
   | "copyFailed"

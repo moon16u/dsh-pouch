@@ -22,7 +22,7 @@
 | :--- | :--- | :--- |
 | **[`@moon16u/dsh-plugin-restart`](./packages/dsh-plugin-restart)** | Host / Web UI | Safe, detached DSH process restart commands (`/restart`, `/dsh-restart`) and agent tool (`dsh_restart`) with native Web UI candidate styling. |
 | **[`@moon16u/dsh-plugin-current-time`](./packages/dsh-plugin-current-time)** | Host / Agent | Injects the host's real date, time, and timezone into agent context at the start of every turn, so a long-running session never reasons from a stale date. |
-| **[`@moon16u/dsh-plugin-session-id`](./packages/dsh-plugin-session-id)** | Web UI | Native-styled Copy menu in the web session header for the session title, session directory path, and working directory. |
+| **[`@moon16u/dsh-plugin-session-copy`](./packages/dsh-plugin-session-copy)** | Web UI | Native-styled Copy menu in the web session header for the session title, session directory path, and working directory. |
 | **[`@moon16u/dsh-plugin-web-search-tavily`](./packages/dsh-plugin-web-search-tavily)** | Capability Seam | Real-time web search provider backed by the Tavily REST API, seamlessly integrating with DSH's `ctx.web` capability seam. |
 | **[`@moon16u/dsh-plugin-mcp-console`](./packages/dsh-plugin-mcp-console)** | Web UI + Host | MCP server console in the settings page: runtime add/edit/enable/disable/reconnect/delete, per-tool switches, live status over SSE, and mcpServers JSON import. Zero MCP protocol code — everything rides the official `@deepseek-ai/dsh-mcp-client`. Profile-YAML MCP entries are auto-migrated into dynamic management on boot/refresh (and exportable back). |
 
@@ -69,7 +69,7 @@ dsh plugin --profile web add https://github.com/moon16u/dsh-pouch.git
 * **Problem**: A model has no clock. It infers "today" from whatever the harness injected once at startup, so a session left open across midnight keeps reasoning from yesterday's date — and nothing in the transcript contradicts it.
 * **Solution**: Hooks `agent/pre-step` and appends one wall-clock reading after the prompt on the first step of every turn. Once per turn rather than per step, so a tool-call loop does not bury the transcript in near-identical timestamps.
 
-### 3. `@moon16u/dsh-plugin-session-id`
+### 3. `@moon16u/dsh-plugin-session-copy`
 * **Problem**: Getting the current session's storage folder, title, or working directory out of the UI means digging through URLs, console logs, or the filesystem by hand.
 * **Solution**: Injects a native-styled **Copy** button into the web header utility bar. It opens a menu with three targets — **Session title**, **Session directory** (the session's real on-disk folder path), and **Working directory** — each disabled with a stated reason until its value exists. The directory comes from one authenticated, read-only host route over the JSONL backend's public `resolveCurrentLog`; it only locates current-format logs, never reads log contents, and takes no write lease. An empty result may mean an unwritten session or an unsupported log format; older generations remain unavailable.
 

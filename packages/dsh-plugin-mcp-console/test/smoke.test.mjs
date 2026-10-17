@@ -45,7 +45,7 @@ test("apply registers a system-prompt announcement behind its own inject scope",
   assert.equal(sections[0].name, "plugin:mcp-console");
   assert.ok(Number.isFinite(sections[0].order));
   // the guidance tells the model where the console lives and what it does
-  assert.match(sections[0].text, /MCP 服务器/);
+  assert.match(sections[0].text, /MCP Servers/);
   assert.match(sections[0].text, /mcp__/);
   assert.match(sections[0].text, /dsh-mcp\.json/);
 });
