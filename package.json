@@ -1,6 +1,6 @@
 {
   "name": "@moon16u/dsh-pouch",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "A collection of small, beautiful, and practical plugins for DeepSeek Harness (DSH)",
   "type": "module",
   "main": "./lib/index.js",
@@ -53,6 +53,10 @@
   ],
   "author": "moon16u",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/moon16u/dsh-pouch.git"
+  },
   "engines": {
     "dsh": ">=0.2.1-rc.1"
   },
