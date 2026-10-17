@@ -53,7 +53,7 @@ window.__ModuleLoader__.load({
       "directoryPending": "Loading the session directory",
     };
 
-    var css = ".dsh-session-copy-copy{border:1px solid var(--dsw-alias-border-l2);min-width:64px;height:32px;color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family);cursor:pointer;background:0 0;border-radius:18px;justify-content:center;align-items:center;gap:4px;padding:6px 12px;font-size:13px;font-weight:400;line-height:20px;display:inline-flex}.dsh-session-copy-copy:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}.dsh-session-copy-copy:disabled{color:var(--dsw-alias-label-dimmed);cursor:wait}.dsh-session-copy-copy span,.dsh-session-copy-copy svg{flex:none}.dsh-session-copy-copy span{white-space:nowrap}.dsh-session-copy-menu-hint{display:block}.dsh-session-copy-menu-reason{color:var(--dsw-alias-label-dimmed);font-size:11px;line-height:16px}.dsh-session-copy-status{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}";
+    var css = ".dsh-session-copy-copy{border:1px solid var(--dsw-alias-border-l2);min-width:64px;height:32px;color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family);cursor:pointer;background:0 0;border-radius:18px;justify-content:center;align-items:center;gap:4px;padding:6px 12px;font-size:13px;font-weight:400;line-height:20px;display:inline-flex}.dsh-session-copy-copy:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}.dsh-session-copy-copy:disabled{color:var(--dsw-alias-label-dimmed);cursor:wait}.dsh-session-copy-copy span,.dsh-session-copy-copy svg{flex:none}.dsh-session-copy-copy span{white-space:nowrap}.dsh-session-copy-menu{min-width:0}.dsh-session-copy-menu-hint{display:block;text-align:center}.dsh-session-copy-menu-reason{color:var(--dsw-alias-label-dimmed);font-size:11px;line-height:16px;text-align:center}.dsh-session-copy-status{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}";
 
     if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=\"@moon16u/dsh-plugin-session-copy/SessionCopyAction.module.css\"]") === null) {
       var tag = document.createElement("style");
@@ -322,6 +322,7 @@ window.__ModuleLoader__.load({
           autoFocus: true,
           anchor: trigger,
           items: entries,
+          listClassName: "dsh-session-copy-menu",
           onSelect: handleSelect,
           onClose: function () { setOpen(false); },
         }),

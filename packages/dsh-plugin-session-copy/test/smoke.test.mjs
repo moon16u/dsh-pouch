@@ -43,6 +43,10 @@ test("client bundle reuses the shared Menu with accessible menu semantics", asyn
   assert.match(source, /aria-expanded/);
   assert.match(source, /aria-live":\s*"polite"/);
   assert.match(source, /api\/dsh-session-copy\/directory/);
+  // The card hugs its labels instead of the shared 144px minimum.
+  assert.match(source, /\.dsh-session-copy-menu\{min-width:0\}/);
+  assert.match(source, /\.dsh-session-copy-menu-hint\{display:block;text-align:center\}/);
+  assert.match(source, /listClassName: "dsh-session-copy-menu"/);
 });
 
 test("client bundle keeps the Session log button styling", async () => {

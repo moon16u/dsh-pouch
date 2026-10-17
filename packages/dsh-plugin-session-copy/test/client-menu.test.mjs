@@ -299,6 +299,7 @@ test("menu exposes exactly three items in title/directory/cwd order", async () =
     assert.equal(harness.menu.props.portal, true);
     assert.equal(harness.menu.props.autoFocus, true);
     assert.equal(harness.menu.props.open, false);
+    assert.equal(harness.menu.props.listClassName, "dsh-session-copy-menu");
   } finally {
     harness.restore();
   }
