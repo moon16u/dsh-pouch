@@ -211,6 +211,11 @@ window.__ModuleLoader__.load({
       ".mcp-mgr-iconbtn{border:0;background:0 0;color:var(--dsw-alias-label-secondary,#6b7280);cursor:pointer;border-radius:8px;width:30px;height:30px;display:grid;place-items:center;flex:none;padding:0}",
       ".mcp-mgr-iconbtn:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover,rgba(0,0,0,.05));color:var(--dsw-alias-label-primary,#111827)}",
       ".mcp-mgr-iconbtn:disabled{color:var(--dsw-alias-label-dimmed,#9ca3af);cursor:wait}",
+      // A refresh keeps the icon at its normal color and spins it; the disabled
+      // dimming was the entire feedback, and at ~50 ms it read as a blink.
+      ".mcp-mgr-iconbtn[data-busy=true]{color:var(--dsw-alias-label-secondary,#6b7280);cursor:progress}",
+      ".mcp-spin{animation:mcp-spin .8s linear infinite;transform-origin:50% 50%}",
+      "@keyframes mcp-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}",
       ".mcp-mgr-btn{border:1px solid var(--dsw-alias-border-l2,#e5e7eb);background:var(--dsw-alias-bg-base,#ffffff);color:var(--dsw-alias-label-primary,#111827);font-family:var(--dsw-font-family);cursor:pointer;border-radius:8px;padding:6px 14px;font-size:13px;line-height:20px;display:inline-flex;align-items:center;gap:6px;box-shadow:0 1px 2px rgba(0,0,0,.04)}",
       ".mcp-mgr-btn:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover,#f9fafb);border-color:#d1d5db}",
       ".mcp-mgr-btn:disabled{color:var(--dsw-alias-label-dimmed,#9ca3af);cursor:default}",
@@ -951,6 +956,7 @@ window.__ModuleLoader__.load({
       }
 
       function refresh() {
+        if (refreshing) return;
         setRefreshing(true);
         withBusy(null, function () {
           return mcpApi("/refresh", { method: "POST" }).then(function () { return load(); });
@@ -1047,7 +1053,6 @@ window.__ModuleLoader__.load({
       var servers = snapshot && snapshot.servers ? snapshot.servers : [];
       var readOnlyServers = snapshot && snapshot.externalServers ? snapshot.externalServers : [];
       var allServers = servers.concat(readOnlyServers);
-      var busyAny = busy !== null || refreshing;
 
       var listChildren = [];
       if (allServers.length === 0) {
@@ -1146,7 +1151,9 @@ window.__ModuleLoader__.load({
               }, t("confirmYes")))));
       }
 
-      var topDisabled = refreshing || mode !== null;
+      // Only the refresh control reflects refresh progress. Disabling the two
+      // write buttons for the same round-trip made the whole header blink.
+      var topDisabled = mode !== null;
 
       // Master switch off: the whole host side is down, so the page offers the
       // way back instead of actions that cannot work.
@@ -1164,9 +1171,10 @@ window.__ModuleLoader__.load({
           McpH("h2", { className: "mcp-mgr-title" }, t("title")),
           McpH("button", {
             type: "button", className: "mcp-mgr-iconbtn", disabled: refreshing,
+            "data-busy": refreshing ? "true" : "false",
             title: t("refresh"), "aria-label": t("refresh"),
             onClick: refresh,
-          }, McpH(IconRefresh, { size: 15 })),
+          }, McpH(IconRefresh, { size: 15, className: refreshing ? "mcp-spin" : undefined })),
           McpH("button", {
             type: "button", className: "mcp-mgr-btn", disabled: topDisabled,
             onClick: function () { setEditing(null); setMode("add"); },
