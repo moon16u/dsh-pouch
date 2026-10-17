@@ -50,14 +50,14 @@ test("root bundle and package bundle expose the same session-id registration", a
 
 test("root bundle still carries the neighbouring plugin sections", async () => {
   const source = await readFile(join(pouchRoot, "lib/client.js"), "utf8");
-  assert.match(source, /dsh-plugin-llm-headers: the Request Headers settings section/);
+  assert.doesNotMatch(source, /dsh-plugin-llm-headers/, "llm-headers has been retired from the bundle");
   assert.match(source, /mcpConsoleApply/);
   assert.match(source, /Smoothly restart DSH process in 3 seconds/);
   assert.match(source, /--dsw-alias-label-primary/);
   assert.doesNotMatch(source, /复制会话 ID/, "the legacy bare-id label is gone from the root bundle");
 
   const baseline = await readFile(join(pouchRoot, "lib/client.js"), "utf8");
-  for (const neighbour of ["McpSection", "HeadersSection", "mcpConsoleApply", "createSettingsMirror"]) {
+  for (const neighbour of ["McpSection", "mcpConsoleApply"]) {
     assert.ok(baseline.includes(neighbour), `${neighbour} must survive the sync`);
   }
 });

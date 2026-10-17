@@ -39,7 +39,7 @@ let root = readFileSync(rootPath, "utf8");
 if (!root.includes('var _uiPrimitives = require("@deepseek-ai/dsh-client-ui-primitives");')) {
   throw new Error("root client.js anchor (ui-primitives require) not found");
 }
-if (!root.includes("    exports.HeadersSection = HeadersSection;")) {
+if (!root.includes("    exports.SessionIdAction = SessionIdAction;")) {
   throw new Error("root client.js anchor (exports block) not found");
 }
 
@@ -53,8 +53,8 @@ if (start !== -1 && end !== -1 && end > start) {
   root = root.slice(0, start) + body.trimEnd() + root.slice(end + END.length);
 } else {
   root = root.replace(
-    "    exports.HeadersSection = HeadersSection;",
-    body.trimEnd() + "\n\n    exports.HeadersSection = HeadersSection;",
+    "    exports.SessionIdAction = SessionIdAction;",
+    body.trimEnd() + "\n\n    exports.SessionIdAction = SessionIdAction;",
   );
 }
 

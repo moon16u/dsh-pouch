@@ -24,7 +24,6 @@
 | **[`@moon16u/dsh-plugin-current-time`](./packages/dsh-plugin-current-time)** | Host / Agent | 每轮对话开始时向 Agent 上下文注入宿主机的真实日期、时间与时区，长会话跨天也不会再按旧日期推理。 |
 | **[`@moon16u/dsh-plugin-session-id`](./packages/dsh-plugin-session-id)** | Web UI | Web 会话顶栏的原生风格「复制」菜单：会话标题、会话目录路径、工作目录。 |
 | **[`@moon16u/dsh-plugin-web-search-tavily`](./packages/dsh-plugin-web-search-tavily)** | Capability Seam | 基于 Tavily REST API 的真实网络搜索提供方，无缝接入 DSH 官方 `ctx.web` 网络能力标准。 |
-| **[`@moon16u/dsh-plugin-llm-headers`](./packages/dsh-plugin-llm-headers)** | LLM 接缝 | 请求头由 `settings.yaml` 说了算的供应方路由（含 DSH 保留的 `User-Agent`）：字面量、`${env:NAME}` 插值、按模型覆盖、`null` 删除，pi-ai 自带的 37 个供应方只写 headers 即可接入。 |
 | **[`@moon16u/dsh-plugin-mcp-console`](./packages/dsh-plugin-mcp-console)** | Web UI + Host | 设置页「MCP 服务器」控制台：运行时增删改/启停/重连、工具级开关、SSE 实时状态、mcpServers JSON 导入。零 MCP 协议代码——全部复用官方 `@deepseek-ai/dsh-mcp-client`；profile YAML 里的 MCP 条目在启动/刷新时自动移植为动态管理（可逆回写）。 |
 
 ---
@@ -33,7 +32,7 @@
 
 ### 方式一：通过 DSH CLI 一行命令一键安装（推荐 ⭐️⭐️⭐️⭐️⭐️）
 
-只需在终端执行一行命令，DSH 将自动下载并加载全部 6 个实用插件（0 手动配置，开箱即用）：
+只需在终端执行一行命令，DSH 将自动下载并加载全部 5 个实用插件（0 手动配置，开箱即用）：
 
 ```bash
 # 1. 一键安装整套工具箱（来自 npm）
@@ -78,12 +77,7 @@ dsh plugin --profile web add https://github.com/moon16u/dsh-pouch.git
 * **痛点**：默认搜索引擎可能受限或无法获取高质量结构化检索结果。
 * **解决**：标准实现 DSH 的 `ctx.web.registerSearchProvider` 接口，支持通过环境变量 `TAVILY_API_KEY` 或 DSH Credentials 凭据管理服务安全解析密钥。
 
-### 5. `@moon16u/dsh-plugin-llm-headers`
-* **痛点**：DSH 在每个供应方请求上最后合入自己的 attribution `User-Agent`，`llm-pi-ai` 里的 `headers` 无法覆盖这个保留名。按客户端标识鉴权的网关——腾讯 CodeBuddy 会返回 `500 {"code":11128,"msg":"request illegal"}`——单靠配置无法接入。
-* **方案**：用自己的 `llm-headers` 段落声明路由，仍交给官方 `PiAiAdapter` 承载，只把 pi-ai provider 包了一层，让配置的请求头在进入 socket 前拿到最后一次写权。另附一个**请求头**设置页（独立左侧栏入口）——官方提供方卡片没有对外 slot，且写进 `llm-pi-ai` 的请求头本就会被剥掉。包 provider 而不是协议对象，是为了让 pi-ai 自带的路由保留自己的 API 实现——这类路由两行就能接。未配置 headers 的路由照常发送 DSH attribution，且拒绝删除它。
-* **版本跨度**：为 DSH `0.1.7-rc.2` 构建。设置页读取提供方目录，写入走 rc.2 的 schema 驱动设置面——段落从各插件的 `export const Config` 自行发现，GUI 编辑以 `.volatile()` 就地热更新（无需 fiber 重启），本插件在 `settings/document-updated` 时重新注册适配器与路由。它必须遵守两条宿主契约：提供方 profile 校验的是路由的副本，settings provider 交出的 `deepFreeze` 段落因此保持原样；解析出的 profile 也带上 `dsh-llm-pi-ai` 的 `PiAiAdapter.modelOf` 读取的 `modelErrors` 映射。
-
-### 6. `@moon16u/dsh-plugin-mcp-console`
+### 5. `@moon16u/dsh-plugin-mcp-console`
 * **痛点**：官方接入 MCP 的方式是往 `cordis.patch.yml` 写静态条目——没有 GUI、不能运行时增删改，每次改动都要重启；声明出来的服务器在面板里只能是只读摆设。
 * **方案**：设置页新增完整的**MCP 服务器**管理页，基于 cordis 动态装配运行时编排官方 `@deepseek-ai/dsh-mcp-client`（每台一个 fiber，热更新配置、免重启 DSH）：主开关、工具级启停胶囊、SSE 实时状态与工具列表、mcpServers JSON 一键导入。外部 Agent 写进 `cordis.patch.yml` 的 MCP 条目由 Auto-Ingest 引擎接管：启动/刷新时连根移植进 `~/.dsh/dsh-mcp.json`（含 fiber 接管与条目级 YAML 精确修剪），`POST /export-yaml` 可逆回写。所有 API 响应中的凭据一律打码。
 
