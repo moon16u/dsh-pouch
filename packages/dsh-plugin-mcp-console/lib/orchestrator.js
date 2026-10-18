@@ -1,36 +1,5 @@
-/**
- * Orchestrator: the console's core. It owns the fiber ledger
- * (`Map<serverName, { fiber, config, error, ... }>`) and every
- * lifecycle operation on the official `@deepseek-ai/dsh-mcp-client`:
- *
- *   load      ctx.plugin(mcpClient, config)   — one fiber per server
- *   update    fiber.update(newConfig)          — hot config swap
- *   disable   fiber.dispose()                  — disconnect + unregister tools
- *   enable    load again
- *   reconnect fiber.restart()
- *
- * The console implements ZERO MCP protocol code (plan red line): connection,
- * reconnect backoff, tool discovery, `mcp__` naming and image bridging are
- * all inherited from the official client.
- *
- * Concurrency: every mutating operation runs through a serialized promise
- * chain. Tool ownership is a pure prefix match on the official naming
- * contract (`mcp__<serverName>__<rawName>`): normalization replaces invalid
- * characters and truncation only shortens the tail before appending the
- * 12-hex identity hash, so the server prefix survives every lossy rename.
- * Nothing is inferred by diffing the global registry around a load — a diff
- * would also catch unrelated tools registered at the same moment (host
- * plugin tools, other MCP servers' tools), which is exactly how a
- * non-MCP tool once showed up inside an MCP server's card.
- *
- * Conflict pre-check (plan §5.2): before assembling a fiber, the serverName
- * is checked against (a) this ledger and (b) every LIVE mcp-client fiber in
- * the registry — which covers servers declared manually in the profile's
- * cordis config, regardless of which physical copy of dsh-mcp-client loaded
- * them (this console vendors its own copy, so the official module-level
- * namespace reservation cannot see across copies; the registry scan can).
- */
-import { resolveMcpClient, toClientConfig, validateServerConfig } from "./clientAdapter.js";
+/** Serialized configuration and lifecycle owner for one registration scope. */
+import { resolveMcpClient, toClientConfig, validateServerConfig, clientScopeOf } from "./clientAdapter.js";
 import { ingestProfileMcpEntries, defaultProfilePatchYamlPath } from "./yamlMigrator.js";
 
 /** cordis FiberState values (const enum, not exported at runtime). */
@@ -79,8 +48,15 @@ export class Orchestrator {
    *        after any state mutation worth broadcasting.
    * @param {string} [options.profileYamlPath] profile patch layer to ingest.
    */
-  constructor(ctx, { globalStore, onChange, profileYamlPath }) {
+  constructor(ctx, { globalStore, onChange, profileYamlPath, scopeKey, ingestProfile = true, reservedNames = () => [], ownedElsewhere = () => [], projectOnly = false, defaultScope = projectOnly ? "project" : "global" }) {
     this.ctx = ctx;
+    this.scopeKey = scopeKey;
+    this.ingestProfile = ingestProfile;
+    this.reservedNames = reservedNames;
+    this.ownedElsewhere = ownedElsewhere;
+    this.projectOnly = projectOnly;
+    this.defaultScope = defaultScope;
+    this.closed = false;
     this.globalStore = globalStore;
     this.projectStore = null;
     this.projectRoot = null;
@@ -109,7 +85,9 @@ export class Orchestrator {
     const set = new Set();
     for (const config of this.storedServers().values()) {
       if (Array.isArray(config.disabledTools)) {
-        for (const name of config.disabledTools) set.add(name);
+        for (const name of config.disabledTools) {
+          if (name.startsWith(`mcp__${config.name}__`) && !this.namespaceConflict(config.name)) set.add(name);
+        }
       }
     }
     this.disabledToolSet = set;
@@ -137,8 +115,10 @@ export class Orchestrator {
   /** All configured servers across scopes (stored configs, no live status). */
   storedServers() {
     const out = new Map();
-    for (const [name, config] of Object.entries(this.globalStore.read().servers)) {
-      out.set(name, { ...config, name, scope: config.scope === "project" ? "project" : "global" });
+    if (!this.projectOnly) {
+      for (const [name, config] of Object.entries(this.globalStore.read().servers)) {
+        out.set(name, { ...config, name, scope: "global" });
+      }
     }
     if (this.projectStore) {
       for (const [name, config] of Object.entries(this.projectStore.read().servers)) {
@@ -149,13 +129,14 @@ export class Orchestrator {
   }
 
   storeFor(scope) {
+    if (this.projectOnly) return this.projectStore ?? this.globalStore;
     return scope === "project" ? this.projectStore : this.globalStore;
   }
 
   /** Snapshot every globally registered tool name. */
   toolNamesSnapshot() {
     try {
-      return new Set(this.ctx.tools.schemas().map((schema) => schema.name));
+      return new Set(this.ctx.tools.schemas(this.scopeKey).map((schema) => schema.name));
     } catch {
       return new Set();
     }
@@ -172,6 +153,9 @@ export class Orchestrator {
       for (const [, runtime] of this.ctx.registry.entries()) {
         if (runtime?.name !== "mcp-client") continue;
         for (const fiber of runtime.fibers) {
+          const owner = fiber?.ctx ? clientScopeOf(fiber.ctx) : undefined;
+          if (owner !== undefined && owner !== this.scopeKey) continue;
+          if (fiber?.state === FiberState.DISPOSED) continue;
           const serverName = fiber?.config?.serverName;
           if (typeof serverName === "string") names.add(serverName);
         }
@@ -202,12 +186,31 @@ export class Orchestrator {
    * path and the side-fiber probe, which owns no ledger entry.
    */
   attributeTools(name, current) {
+    if (this.namespaceConflict(name)) return [];
     const prefix = `mcp__${name}__`;
     const names = [];
     for (const toolName of current) {
       if (toolName.startsWith(prefix)) names.push(toolName);
     }
     return names.sort();
+  }
+
+  namespaceConflict(name) {
+    const names = new Set([...this.storedServers().keys(), ...this.liveServerNames(), ...this.reservedNames()]);
+    for (const other of names) {
+      if (other !== name && (other.startsWith(name + "__") || name.startsWith(other + "__"))) {
+        return `ambiguous server namespaces "${name}" and "${other}"; rename one before connecting or toggling tools`;
+      }
+    }
+    return null;
+  }
+
+  validateDisabledTools(config) {
+    for (const tool of config.disabledTools) {
+      if (!tool.startsWith(`mcp__${config.name}__`)) throw new ConsoleError("invalid", "disabledTools may only name this server's tools");
+    }
+    const conflict = this.namespaceConflict(config.name);
+    if (conflict) throw new ConsoleError("conflict", conflict);
   }
 
   /**
@@ -221,6 +224,9 @@ export class Orchestrator {
       for (const [, runtime] of this.ctx.registry.entries()) {
         if (runtime?.name !== "mcp-client") continue;
         for (const fiber of runtime.fibers) {
+          const owner = fiber?.ctx ? clientScopeOf(fiber.ctx) : undefined;
+          if (owner !== undefined && owner !== this.scopeKey) continue;
+          if (fiber?.state === FiberState.DISPOSED) continue;
           const serverName = fiber?.config?.serverName;
           if (typeof serverName === "string") names.add(serverName);
         }
@@ -229,6 +235,11 @@ export class Orchestrator {
       // registry shape drift: external names simply read empty until it heals
     }
     for (const name of this.ledger.keys()) names.delete(name);
+    // Servers another console instance already owns are that instance's to
+    // manage; listing them here would label them "external" and offer no
+    // controls, which is how a project view once showed the whole global
+    // list as read-only.
+    for (const name of this.ownedElsewhere()) names.delete(name);
     return names;
   }
 
@@ -243,7 +254,9 @@ export class Orchestrator {
       for (const [, runtime] of this.ctx.registry.entries()) {
         if (runtime?.name !== "mcp-client") continue;
         for (const fiber of runtime.fibers) {
-          if (fiber?.config?.serverName === name && !this.ledger.has(name)) {
+          const owner = fiber?.ctx ? clientScopeOf(fiber.ctx) : undefined;
+          if (owner !== undefined && owner !== this.scopeKey) continue;
+          if (fiber?.config?.serverName === name && !this.ledger.has(name) && fiber.state !== FiberState.DISPOSED) {
             await fiber.dispose();
             return true;
           }
@@ -261,6 +274,7 @@ export class Orchestrator {
    * repeatedly — a clean YAML is a no-op.
    */
   async ingestFromProfile() {
+    if (!this.ingestProfile) return { ingested: [], skipped: [] };
     let result;
     try {
       result = await ingestProfileMcpEntries({ store: this.globalStore, yamlPath: this.profileYamlPath });
@@ -269,7 +283,7 @@ export class Orchestrator {
       this.ctx.logger.error(`mcp-console: profile ingest failed: ${this.ingestError}`);
       return { ingested: [], skipped: [] };
     }
-    this.ingestError = null;
+    this.ingestError = result.skipped.length ? result.skipped.map(item => `${item.name}: ${item.reason}`).join("; ") : null;
     for (const name of result.ingested) {
       await this.disposeExternalFiber(name);
     }
@@ -284,6 +298,8 @@ export class Orchestrator {
     if (!/^[A-Za-z0-9_-]{1,32}$/.test(name)) {
       return `serverName "${name}" must match [A-Za-z0-9_-]{1,32}`;
     }
+    const ambiguity = this.namespaceConflict(name);
+    if (ambiguity) return ambiguity;
     if (this.ledger.has(name)) return `serverName "${name}" is already managed by this console`;
     const external = this.externalServerNames();
     if (external.has(name)) {
@@ -293,39 +309,68 @@ export class Orchestrator {
   }
 
   /** Load every enabled server from the stores. Called once at plugin start. */
-  async bootstrap() {
-    this.rebuildDisabledToolSet();
-    await this.ingestFromProfile();
-    try {
-      this.mcpClient = await resolveMcpClient();
-    } catch (error) {
-      this.clientError = errorMessage(error);
-      this.ctx.logger.error(`mcp-console: ${this.clientError}`);
-      this.onChange();
-      return;
-    }
+  bootstrap() {
+    return this.run(async () => {
+      await this.ingestFromProfile();
+      await this.reconcileNow(true);
+    });
+  }
+
+  reconcile(retry = false) {
+    return this.run(() => this.reconcileNow(retry));
+  }
+
+  async reconcileNow(retry = false) {
     const stored = this.storedServers();
+    for (const name of [...this.ledger.keys()]) {
+      if (!stored.has(name) || stored.get(name).enabled === false) await this.disposeOne(name);
+    }
     for (const [name, raw] of stored) {
       if (raw.enabled === false) continue;
       const { config, error } = validateServerConfig(raw);
-      if (error) {
-        this.ledger.set(name, { fiber: null, config: raw, error, pending: false, loadedAt: 0 });
+      const entry = this.ledger.get(name);
+      const invalid = error ?? this.namespaceConflict(name);
+      if (invalid) {
+        if (entry) await this.disposeOne(name);
+        this.ledger.set(name, { fiber: null, config: raw, error: invalid, pending: false, loadedAt: 0 });
         continue;
       }
-      const conflict = this.precheck(name);
-      if (conflict) {
-        this.ledger.set(name, { fiber: null, config, error: conflict, pending: false, loadedAt: 0 });
-        continue;
-      }
-      await this.loadOne(name, config);
+      const broken = !entry?.fiber ||
+        entry.pending ||
+        entry.error ||
+        entry.fiber.state === FiberState.FAILED ||
+        entry.fiber.state === FiberState.DISPOSED ||
+        (Date.now() - entry.loadedAt >= CONNECT_GRACE_MS && this.toolsOf(name).length === 0);
+      const comparable = c => JSON.stringify({ ...c, disabledTools: [] });
+      const changed = entry && comparable(entry.config) !== comparable(config);
+      if (!entry || changed || (retry && broken)) {
+        const conflict = !entry ? this.precheck(name) : null;
+        if (conflict) {
+          this.ledger.set(name, { fiber: null, config, error: conflict, pending: false, loadedAt: 0 });
+        } else if (entry) await this.swapFiber(entry, config);
+        else await this.loadOne(name, config);
+      } else if (entry) entry.config = config;
     }
+    this.rebuildDisabledToolSet();
     this.onChange();
+  }
+
+  close() {
+    this.closed = true;
+    const stopping = [...this.ledger.values()].map(entry => entry.fiber?.dispose?.());
+    return Promise.allSettled(stopping).then(() => this._chain).then(async () => {
+      for (const name of [...this.ledger.keys()]) await this.disposeOne(name);
+      this.onChange();
+    });
   }
 
   /** Serialized mutators: each returns the API-facing result. */
 
   run(operation) {
-    const next = this._chain.then(operation);
+    const next = this._chain.then(() => {
+      if (this.closed) throw new ConsoleError("internal", "MCP console is stopping");
+      return operation();
+    });
     // keep the chain alive even when an operation rejects
     this._chain = next.then(() => {}, () => {});
     return next;
@@ -333,7 +378,7 @@ export class Orchestrator {
 
   add(rawServer) {
     return this.run(async () => {
-      const { config, error } = validateServerConfig(rawServer);
+      const { config, error } = validateServerConfig({ ...rawServer, scope: rawServer?.scope ?? this.defaultScope });
       if (error) throw new ConsoleError("invalid", error);
       if (config.scope === "project" && !this.projectStore) {
         throw new ConsoleError("invalid", "project scope is unavailable: no session workspace is attached");
@@ -343,11 +388,13 @@ export class Orchestrator {
       if (existing.has(config.name)) {
         throw new ConsoleError("conflict", `serverName "${config.name}" already exists; edit it instead`);
       }
+      if (this.projectOnly) config.scope = "project";
       const conflict = this.precheck(config.name);
       if (conflict) throw new ConsoleError("conflict", conflict);
-      if (config.enabled !== false) await this.loadOne(config.name, config);
+      this.validateDisabledTools(config);
       this.persistServer(config);
       this.rebuildDisabledToolSet();
+      if (config.enabled !== false) await this.loadOne(config.name, config);
       this.onChange();
       return { config: this.publicConfig(config) };
     });
@@ -364,10 +411,12 @@ export class Orchestrator {
       }
       // masked round-trip: the panel sends "••••" for unchanged secrets and
       // "" for "remove this entry" — resolve both against the stored values.
-      if (patch && patch.env) merged.env = mergeMasked(existing.env, patch.env);
-      if (patch && patch.headers) merged.headers = mergeMasked(existing.headers, patch.headers);
+      if (patch && Object.hasOwn(patch, "env")) merged.env = mergeMasked(existing.env, patch.env);
+      if (patch && Object.hasOwn(patch, "headers")) merged.headers = mergeMasked(existing.headers, patch.headers);
       const { config, error } = validateServerConfig(merged);
       if (error) throw new ConsoleError("invalid", error);
+      if (this.projectOnly) config.scope = "project";
+      this.validateDisabledTools(config);
       const entry = this.ledger.get(name);
       // A pure per-tool toggle (disabledTools only) needs no fiber reload:
       // the execution guard reads the live index.
@@ -382,27 +431,19 @@ export class Orchestrator {
         this.onChange();
         return { config: this.publicConfig(config) };
       }
-      if (entry && entry.fiber && config.enabled !== false) {
-        await this.swapFiber(entry, config);
-      } else if (entry && config.enabled === false) {
-        await this.disposeOne(name);
-      } else if (!entry && config.enabled !== false) {
-        const conflict = this.precheck(name);
-        if (conflict) throw new ConsoleError("conflict", conflict);
-        await this.loadOne(name, config);
-      }
-      // scope migration: drop the entry from the store it is leaving, so a
-      // global->project move never leaves a stale global copy that would
-      // resurrect when the project store detaches
+      this.persistServer(config);
       if (config.scope !== existing.scope) {
         const oldStore = this.storeFor(existing.scope);
-        if (oldStore && oldStore !== this.storeFor(config.scope)) {
-          oldStore.mutate((servers) => {
-            delete servers[name];
-          });
+        try {
+          oldStore?.mutate(servers => { delete servers[name]; });
+        } catch (error) {
+          this.storeFor(config.scope).mutate(servers => { delete servers[name]; });
+          throw error;
         }
       }
-      this.persistServer(config);
+      if (!config.enabled) await this.disposeOne(name);
+      else if (entry) await this.swapFiber(entry, config);
+      else await this.loadOne(name, config);
       this.rebuildDisabledToolSet();
       this.onChange();
       return { config: this.publicConfig(config) };
@@ -429,13 +470,19 @@ export class Orchestrator {
       const existing = this.storedServers().get(name);
       if (!existing) throw new ConsoleError("not_found", `unknown server "${name}"`);
       if (enabled) {
-        if (this.ledger.has(name)) throw new ConsoleError("conflict", `server "${name}" is already enabled`);
+        if (this.ledger.has(name) && !this.ledger.get(name).error && this.ledger.get(name).fiber?.state === FiberState.ACTIVE) return { name, enabled };
         const { config, error } = validateServerConfig({ ...existing, enabled: true });
         if (error) throw new ConsoleError("invalid", error);
-        const conflict = this.precheck(name);
-        if (conflict) throw new ConsoleError("conflict", conflict);
-        await this.loadOne(name, config);
+        if (this.projectOnly) config.scope = "project";
+        this.validateDisabledTools(config);
         this.persistServer(config);
+        const entry = this.ledger.get(name);
+        if (entry) await this.swapFiber(entry, config);
+        else {
+          const conflict = this.precheck(name);
+          if (conflict) throw new ConsoleError("conflict", conflict);
+          await this.loadOne(name, config);
+        }
       } else {
         await this.disposeOne(name);
         this.persistServer({ ...existing, enabled: false });
@@ -447,11 +494,17 @@ export class Orchestrator {
 
   reconnect(name) {
     return this.run(async () => {
+      const raw = this.storedServers().get(name);
+      if (!raw) throw new ConsoleError("not_found", `unknown server "${name}"`);
+      if (raw.enabled === false) throw new ConsoleError("invalid", "enable the server before reconnecting");
+      const { config, error } = validateServerConfig(raw);
+      if (error) throw new ConsoleError("invalid", error);
+      this.validateDisabledTools(config);
       const entry = this.ledger.get(name);
-      if (!entry) throw new ConsoleError("not_found", `server "${name}" is not loaded`);
-      if (!entry.fiber) throw new ConsoleError("invalid", entry.error ?? "server has no fiber to restart");
-      await this.swapFiber(entry, entry.config);
+      if (entry) await this.swapFiber(entry, config);
+      else await this.loadOne(name, config);
       this.onChange();
+      if (this.ledger.get(name)?.error) throw new ConsoleError("internal", this.ledger.get(name).error);
       return { name };
     });
   }
@@ -484,6 +537,8 @@ export class Orchestrator {
       if (error) {
         return { ok: false, live: false, toolCount: 0, latencyMs: 0, error };
       }
+      const ambiguity = this.namespaceConflict(name);
+      if (ambiguity) return { ok: false, live: false, toolCount: 0, latencyMs: 0, error: ambiguity };
       const entry = this.ledger.get(name);
       if (entry && entry.fiber && entry.fiber.state !== FiberState.DISPOSED) {
         // Namespace reserved by the live fiber: report, do not collide.
@@ -503,7 +558,7 @@ export class Orchestrator {
       try {
         if (!this.mcpClient) this.mcpClient = await resolveMcpClient();
         // force failOnStartupError: the probe must hear about a failed handshake
-        const probeConfig = { ...toClientConfig(config), failOnStartupError: true };
+        const probeConfig = { ...this.clientConfig(config), failOnStartupError: true };
         fiber = this.ctx.plugin(this.mcpClient, probeConfig);
         await new Promise((resolve, reject) => {
           timer = setTimeout(
@@ -544,32 +599,13 @@ export class Orchestrator {
    */
   refresh() {
     return this.run(async () => {
-      // sync config first: newly written profile-YAML entries become managed
       const ingest = await this.ingestFromProfile();
-      for (const name of ingest.ingested) {
-        const raw = this.storedServers().get(name);
-        if (!raw || raw.enabled === false) continue;
-        const { config, error } = validateServerConfig(raw);
-        if (error) continue;
-        const conflict = this.precheck(name);
-        if (conflict) continue;
-        await this.loadOne(name, config);
-      }
-      const restarted = [];
-      for (const [name, entry] of [...this.ledger]) {
-        const broken =
-          entry.error !== null ||
-          (entry.fiber !== null && !entry.pending && entry.fiber.state === FiberState.FAILED) ||
-          (entry.fiber !== null && entry.fiber.state === FiberState.ACTIVE &&
-            Date.now() - entry.loadedAt >= CONNECT_GRACE_MS && this.toolsOf(name).length === 0);
-        if (broken && entry.fiber !== null) {
-          await this.swapFiber(entry, entry.config);
-          restarted.push(name);
-        }
-      }
-      this.rebuildDisabledToolSet();
-      this.onChange();
-      return { restarted, ingested: ingest.ingested };
+      await this.reconcileNow(true);
+      return {
+        restarted: [...this.ledger].filter(([, entry]) => !entry.error).map(([name]) => name),
+        failed: [...this.ledger].filter(([, entry]) => entry.error).map(([name, entry]) => ({ name, error: entry.error })),
+        ingested: ingest.ingested,
+      };
     });
   }
 
@@ -597,8 +633,9 @@ export class Orchestrator {
           skipped.push({ name: validated.name, reason: conflict });
           continue;
         }
-        await this.loadOne(validated.name, validated);
+        try { this.validateDisabledTools(validated); } catch (error) { skipped.push({ name, reason: error.message }); continue; }
         this.persistServer(validated);
+        if (validated.enabled !== false) await this.loadOne(validated.name, validated);
         added.push(this.publicConfig(validated));
       }
       this.rebuildDisabledToolSet();
@@ -613,8 +650,14 @@ export class Orchestrator {
     const store = this.storeFor(config.scope) ?? this.globalStore;
     const { name, ...rest } = config;
     store.mutate((servers) => {
-      servers[name] = rest;
+      Object.defineProperty(servers, name, { value: rest, enumerable: true, configurable: true, writable: true });
     });
+  }
+
+  clientConfig(config) {
+    const value = toClientConfig(config);
+    if (config.scope === "project" && value.transport === "stdio" && !value.cwd) value.cwd = this.projectRoot;
+    return value;
   }
 
   async loadOne(name, config) {
@@ -628,15 +671,19 @@ export class Orchestrator {
     this.ledger.set(name, entry);
     try {
       if (!this.mcpClient) this.mcpClient = await resolveMcpClient();
-      const fiber = this.ctx.plugin(this.mcpClient, toClientConfig(config));
+      if (this.closed) throw new Error("MCP console is stopping");
+      const fiber = this.ctx.plugin(this.mcpClient, this.clientConfig(config));
       entry.fiber = fiber;
-      await fiber;
+      const settled = typeof fiber.await === "function" ? await fiber.await() : await fiber;
+      entry.fiber = settled ?? fiber;
       entry.pending = false;
       entry.loadedAt = Date.now();
       entry.error = null;
+      this.clientError = null;
     } catch (error) {
       entry.pending = false;
       entry.error = errorMessage(error);
+      if (!this.mcpClient) this.clientError = entry.error;
       if (entry.fiber && entry.fiber.state !== FiberState.DISPOSED) {
         try {
           await entry.fiber.dispose();
@@ -645,29 +692,23 @@ export class Orchestrator {
           // context teardown; the ledger entry keeps the error either way
         }
       }
+      entry.fiber = null;
     }
+    return entry;
   }
 
   /** Hot-swap an existing fiber's config (update/reconnect both land here). */
   async swapFiber(entry, config) {
-    const fiber = entry.fiber;
     entry.pending = true;
-    entry.error = null;
+    entry.config = config;
     try {
-      if (!this.mcpClient) this.mcpClient = await resolveMcpClient();
-      if (fiber) {
-        await fiber.update(toClientConfig(config));
-      } else {
-        const created = this.ctx.plugin(this.mcpClient, toClientConfig(config));
-        entry.fiber = created;
-        await created;
-      }
-      entry.config = config;
-      entry.pending = false;
-      entry.loadedAt = Date.now();
+      if (entry.fiber && entry.fiber.state !== FiberState.DISPOSED) await entry.fiber.dispose();
+      const fresh = await this.loadOne(config.name, config);
+      if (fresh.error) throw new Error(fresh.error);
     } catch (error) {
-      entry.pending = false;
       entry.error = errorMessage(error);
+      entry.pending = false;
+      // Retain a disposal failure rather than create an overlapping connection.
     }
   }
 
@@ -707,9 +748,13 @@ function maskValues(record) {
  * replaces it.
  */
 export function mergeMasked(stored, incoming) {
-  const out = { ...stored };
+  const out = {};
   for (const [key, value] of Object.entries(incoming ?? {})) {
-    if (value === "••••") continue;
+    if (value === "••••") {
+      if (!Object.hasOwn(stored ?? {}, key)) throw new ConsoleError("invalid", `no stored secret for ${key}`);
+      Object.defineProperty(out, key, { value: stored[key], enumerable: true, configurable: true, writable: true });
+      continue;
+    }
     if (value === "" || value === null || value === undefined) delete out[key];
     else out[key] = String(value);
   }

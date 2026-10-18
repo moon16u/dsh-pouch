@@ -14,26 +14,27 @@ import {
 } from "../lib/yamlMigrator.js";
 
 /**
- * Resolve the js-yaml a host reads a patch layer with, or `null` on a machine
- * that has none. The plugin stays library-free — its YAML edit is line-based —
- * so the host-side parse check borrows the reader wherever it actually lives:
- * this package's tree first, then the DSH profile whose boot consumes the file.
- * A machine with neither reports the check rather than failing on a path that
- * belongs to someone else's install.
+ * Resolve a YAML reader for the host-side parse check. The DSH host boots the
+ * profile with `js-yaml`, so that reader is preferred when the running profile
+ * provides it; the plugin now ships `yaml` itself, so the check always runs
+ * against a real parser instead of silently skipping on machines without a
+ * resolvable js-yaml.
  */
-function hostJsYaml() {
+async function hostYamlReader() {
   const roots = [
     import.meta.url,
     pathToFileURL(join(process.env.DSH_HOME ?? join(homedir(), ".dsh"), "profiles", "web", "package.json")).href,
   ];
   for (const from of roots) {
     try {
-      return createRequire(from)("js-yaml");
+      const jsYaml = createRequire(from)("js-yaml");
+      return { load: (text) => jsYaml.load(text) };
     } catch {
       // not resolvable from this root; try the next one
     }
   }
-  return null;
+  const yaml = await import("yaml");
+  return { load: (text) => yaml.parse(text) };
 }
 
 const SAMPLE_YAML = [
@@ -340,15 +341,12 @@ test("ingest keeps the YAML a top-level array when every item is migrated", asyn
   assert.match(after, /\[\]\s*$/, "explicit [] appended"); // parsePatchList needs an array
 
   // and the trimmed file actually parses as an array — the host-side contract,
-  // read by the same js-yaml a host boots the profile with
-  const jsYaml = hostJsYaml();
-  if (jsYaml === null) {
-    t.diagnostic("js-yaml is not resolvable here; the host-side parse check was not run");
-  } else {
-    const parsed = jsYaml.load(after);
-    assert.ok(Array.isArray(parsed), "comments-only remainder must still load as an array");
-    assert.deepEqual(parsed, []);
-  }
+  // read by the same reader a host boots the profile with (js-yaml when the
+  // running profile provides it, the plugin's own yaml parser otherwise).
+  const reader = await hostYamlReader();
+  const parsed = reader.load(after);
+  assert.ok(Array.isArray(parsed), "comments-only remainder must still load as an array");
+  assert.deepEqual(parsed, []);
   rmSync(dir, { recursive: true, force: true });
 });
 

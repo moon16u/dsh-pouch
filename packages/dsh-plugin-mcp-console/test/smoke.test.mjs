@@ -78,10 +78,10 @@ test("client bundle is a ModuleLoader payload registering the settings section",
   assert.match(source, /mcp-probe/);
   // settings-GUI card (settings.plugin.item keyed "mcp-console"): the plugins
   // tab pairs the host-registered namespace with this browser-side card
-  assert.match(source, /settings\.plugin\.item/);
+  assert.match(source, /plugins\.item/);
   assert.match(source, /McpPluginCard/);
   assert.match(source, /mcp-plugin-card/);
-  assert.match(source, /namespace: "mcp-console"/);
+  assert.match(source, /configForms\.get\("ui-mcp-console"\)/);
   // the old session-header pill must not come back
   assert.doesNotMatch(source, /conversation\.session\.header\.utilities/);
   assert.doesNotMatch(source, /react-dom/);

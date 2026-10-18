@@ -23,9 +23,8 @@ import { Store, globalStorePath, projectStorePath } from "./store.js";
 import { Orchestrator } from "./orchestrator.js";
 import { computeSnapshot } from "./status.js";
 import { registerRoutes } from "./routes.js";
-import { homedir } from "node:os";
-import { resolve, parse, join } from "node:path";
-import { existsSync, readFileSync } from "node:fs";
+import { defaultProfilePatchYamlPath } from "./yamlMigrator.js";
+import { ConsoleAggregate } from "./aggregate.js";
 
 /** Cordis plugin name used by loader diagnostics. */
 export const name = "mcp-console";
@@ -53,11 +52,10 @@ function unwrapValue(v) {
 }
 
 /** Resolve a raw config value (plain or volatile refs) onto the switch defaults. */
-export function resolveConfig(value, storedConfig) {
-  const merged = { ...storedConfig, ...(value || {}) };
+export function resolveConfig(value) {
   return {
-    enabled: unwrapValue(merged?.enabled) !== false,
-    announceToAgent: unwrapValue(merged?.announceToAgent) !== false,
+    enabled: unwrapValue(value?.enabled) !== false,
+    announceToAgent: unwrapValue(value?.announceToAgent) !== false,
   };
 }
 
@@ -115,8 +113,7 @@ export function apply(ctx, config) {
    * have rebuilt them meanwhile), so disposals run from captured locals last.
    */
   async function syncStep() {
-    const storedConfig = globalStore?.read?.()?.config;
-    const value = resolveConfig(current(), storedConfig);
+    const value = resolveConfig(current());
     const wantAnnouncement = value.enabled && value.announceToAgent;
     const toDispose = [];
     if (wantAnnouncement && !announcementFiber) {
@@ -166,46 +163,73 @@ export function apply(ctx, config) {
    */
   function buildComposition(scope) {
     const globalStore = new Store(globalStorePath());
-    const orchestrator = new Orchestrator(scope, { globalStore, onChange: () => notify() });
+    const projects = new Map();
+    /** Every name a project console owns, so the global view never calls it external. */
+    const projectNames = () => projects.size === 0 ? [] : [...projects.values()].flatMap((value) => [...value.orchestrator.storedServers().keys()]);
+    let routes;
+    const orchestrator = new Orchestrator(scope, {
+      globalStore,
+      onChange: () => routes.notify(),
+      // A project server in any live session registers tools inside that
+      // agent's scope, which inherits the global layer: the same public
+      // name would collide there, so global adds must see those names.
+      reservedNames: projectNames,
+      // Project servers are managed by their own console; the global view
+      // must not list them as read-only "external instances".
+      ownedElsewhere: projectNames,
+    });
 
-    // 项目工作区自动感知：
-    // 1. 优先排除法 (process.cwd() 不是家目录或根目录)
-    // 2. 降级读取 DSH 本身存储的当前活跃工作区 (~/.dsh/storages/workspace.json)
-    try {
-      let activeWorkspace = null;
-      const cwd = process.cwd();
-      const home = homedir();
-      const isHomeOrRoot = !cwd || resolve(cwd) === resolve(home) || resolve(cwd) === parse(cwd).root;
-      if (!isHomeOrRoot && existsSync(cwd)) {
-        activeWorkspace = cwd;
-      } else {
-        const wsStoragePath = join(home, ".dsh", "storages", "workspace.json");
-        if (existsSync(wsStoragePath)) {
-          const raw = JSON.parse(readFileSync(wsStoragePath, "utf8"));
-          const workspaces = raw?.tables?.workspaces;
-          if (workspaces && typeof workspaces === "object") {
-            const list = Object.values(workspaces);
-            list.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
-            const target = list.find((w) => w.path && existsSync(w.path) && resolve(w.path) !== resolve(home));
-            if (target) activeWorkspace = target.path;
-          }
+    function projectOrchestrator(sessionId) {
+      const agents = typeof scope.get === "function" ? scope.get("agents") : scope.agents;
+      const directories = typeof scope.get === "function" ? scope.get("workingDirectory") : scope.workingDirectory;
+      const agent = sessionId && agents?.get?.(sessionId);
+      const root = agent && directories?.get?.(agent.session);
+      if (!agent || !root || !agent.ctx) return null;
+      let value = projects.get(agent.id);
+      if (!value || value.root !== root) {
+        void value?.orchestrator.close();
+        const store = new Store(projectStorePath(root));
+        const onChange = () => routes.notify();
+        const created = new Orchestrator(agent.ctx, {
+          globalStore: store,
+          profileYamlPath: defaultProfilePatchYamlPath(),
+          onChange,
+          // `createScope()` keys the agent scope by the Agent object itself,
+          // not its id; tools.schemas(scope) and scopeOf(fiber.ctx) both use
+          // that object identity.
+          scopeKey: agent,
+          ingestProfile: false,
+          projectOnly: true,
+          defaultScope: "project",
+        });
+        created.setProjectStore(store, root);
+        // The project console sees the global servers as another console's,
+        // not as foreign fibers; the aggregate merges both lists for the UI.
+        created.ownedElsewhere = () => [...orchestrator.storedServers().keys()];
+        // The global layer is inherited by this agent's scope, so a name the
+        // global console already owns cannot be registered here too.
+        created.reservedNames = () => [...orchestrator.storedServers().keys()];
+        // Per-tool denials for this project's servers apply only to this
+        // agent: the guard is registered through the agent's own scope.
+        try {
+          agent.ctx.tools.guard((execution) => created.toolGuard(execution));
+        } catch {
+          // an agent scope already unwinding: the guard would not survive
         }
+        void created.bootstrap();
+        value = { root, orchestrator: created };
+        projects.set(agent.id, value);
       }
-
-      if (activeWorkspace) {
-        const projStore = new Store(projectStorePath(activeWorkspace));
-        orchestrator.setProjectStore(projStore, activeWorkspace);
-      }
-    } catch {
-      // 容错降级：保持 global-only
+      return new ConsoleAggregate(orchestrator, value.orchestrator);
     }
 
-    const routes = registerRoutes(scope, {
+    routes = registerRoutes(scope, {
       orchestrator,
       uiStore: globalStore,
-      getPluginConfig: () => resolveConfig(current(), globalStore.read().config),
-      onConfigChange: () => sync(),
+      getPluginConfig: () => resolveConfig(current()),
+      resolveOrchestrator: projectOrchestrator,
     });
+
     const notify = () => routes.notify();
 
     // Per-tool disable (mcp-manager-gui-spec §3.4): a plain-context guard
@@ -225,6 +249,16 @@ export function apply(ctx, config) {
         }
       }
     });
+    scope.on("agent/disposed", () => {
+      for (const [id, value] of projects) {
+        const agents = typeof scope.get === "function" ? scope.get("agents") : scope.agents;
+        if (!agents?.get?.(id)) {
+          void value.orchestrator.close();
+          projects.delete(id);
+        }
+      }
+      notify();
+    });
 
     // Fallback poll (5s): bridges status transitions that emit no events —
     // chiefly "connecting -> failed" when a server never produces tools.
@@ -236,6 +270,9 @@ export function apply(ctx, config) {
     scope.effect(() => {
       void orchestrator.bootstrap().then(() => notify());
       return () => {
+        void orchestrator.close();
+        for (const value of projects.values()) void value.orchestrator.close();
+        projects.clear();
         clearInterval(settleTimer);
         routes.dispose();
       };

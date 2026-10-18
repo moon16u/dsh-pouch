@@ -54,11 +54,40 @@ const LOOPBACK_HOSTNAMES = new Set(["127.0.0.1", "localhost", "[::1]"]);
  *        resolved master switches (settings-GUI backed), surfaced in /health
  * @returns {{ dispose: () => void, notify: () => void }} route handle
  */
-export function registerRoutes(ctx, { orchestrator, uiStore, getPluginConfig, onConfigChange }) {
+export function registerRoutes(ctx, { orchestrator, uiStore, getPluginConfig, resolveOrchestrator }) {
   const sseClients = new Set();
   let heartbeat = null;
   let notifyTimer = null;
   let dirty = false;
+  let disposed = false;
+
+  function sessionIdOf(req) {
+    try {
+      return new URL(req.url ?? "/", "http://localhost").searchParams.get("sessionId") || undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  function orchestratorFor(req) {
+    // A resolver is passed in rather than attached to the Cordis context:
+    // assigning an undeclared property there throws ("cannot set property …
+    // without provide") and would abort the whole composition.
+    try {
+      return resolveOrchestrator?.(sessionIdOf(req)) ?? orchestrator;
+    } catch {
+      return orchestrator;
+    }
+  }
+
+  /**
+   * One request's console view. The global console answers with its own
+   * snapshot; a project-aware aggregate merges the global and project lists
+   * into a single manageable set.
+   */
+  function viewOf(target) {
+    return typeof target?.snapshot === "function" ? target.snapshot() : computeSnapshot(target);
+  }
 
   const disposeRoute = ctx.webServer.register({
     kind: "prefix",
@@ -78,7 +107,7 @@ export function registerRoutes(ctx, { orchestrator, uiStore, getPluginConfig, on
   heartbeat = setInterval(() => {
     for (const client of sseClients) {
       try {
-        client(": ping\n\n");
+        client.send(": ping\n\n");
       } catch {
         // broken pipe: close handler will reap the client
       }
@@ -91,7 +120,7 @@ export function registerRoutes(ctx, { orchestrator, uiStore, getPluginConfig, on
    * Frames carry the full snapshot; identical consecutive snapshots are
    * skipped, so polling and event storms never spam open panels.
    */
-  let lastSent = null;
+  const lastSent = new Map();
   function notify() {
     dirty = true;
     if (notifyTimer) return;
@@ -99,13 +128,12 @@ export function registerRoutes(ctx, { orchestrator, uiStore, getPluginConfig, on
       notifyTimer = null;
       if (!dirty) return;
       dirty = false;
-      const snapshot = JSON.stringify(computeSnapshot(orchestrator));
-      if (snapshot === lastSent) return;
-      lastSent = snapshot;
-      const frame = `event: status_changed\ndata: ${snapshot}\n\n`;
       for (const client of sseClients) {
         try {
-          client(frame);
+          const snapshot = JSON.stringify(viewOf(client.orchestrator));
+          if (snapshot === lastSent.get(client)) continue;
+          lastSent.set(client, snapshot);
+          client.send(`event: status_changed\ndata: ${snapshot}\n\n`);
         } catch {
           // reaped by close handler
         }
@@ -115,6 +143,10 @@ export function registerRoutes(ctx, { orchestrator, uiStore, getPluginConfig, on
   }
 
   async function handle(req, res) {
+    if (disposed) {
+      respond(res, 404, { error: { code: "not_found", message: "MCP console is disabled" } });
+      return;
+    }
     const url = new URL(req.url ?? "/", "http://localhost");
     const segments = url.pathname.slice(ROUTE_PREFIX.length).split("/").filter(Boolean).map(decodeURIComponent);
     const method = req.method ?? "GET";
@@ -126,34 +158,35 @@ export function registerRoutes(ctx, { orchestrator, uiStore, getPluginConfig, on
       return;
     }
 
+    const current = orchestratorFor(req);
     if (segments[0] === "health" && method === "GET") {
       respond(res, 200, {
         ok: true,
         plugin: "mcp-console",
         config: getPluginConfig ? getPluginConfig() : null,
-        globalStore: orchestrator.globalStore.path,
-        projectStore: orchestrator.projectStore?.path ?? null,
-        managed: [...orchestrator.ledger.keys()].sort(),
-        disabledTools: [...orchestrator.disabledToolSet].sort(),
-        profileYaml: orchestrator.profileYamlPath,
-        ingestError: orchestrator.ingestError,
+        globalStore: current.globalStore.path,
+        projectStore: current.projectStore?.path ?? null,
+        managed: [...current.ledger.keys()].sort(),
+        disabledTools: [...current.disabledToolSet].sort(),
+        profileYaml: current.profileYamlPath,
+        ingestError: current.ingestError,
       });
       return;
     }
 
     if (segments[0] === "refresh" && method === "POST") {
-      respond(res, 200, await orchestrator.refresh());
+      respond(res, 200, await current.refresh());
       return;
     }
 
     if (segments[0] === "export-yaml" && method === "POST") {
-      const result = await exportStoreToProfileYaml({ store: orchestrator.globalStore });
+      const result = await exportStoreToProfileYaml({ store: current.globalStore });
       respond(res, 200, result);
       return;
     }
 
     if (segments[0] === "servers") {
-      await handleServers(req, res, method, segments.slice(1));
+      await handleServers(current, req, res, method, segments.slice(1));
       return;
     }
 
@@ -165,13 +198,13 @@ export function registerRoutes(ctx, { orchestrator, uiStore, getPluginConfig, on
         return;
       }
       const { servers, errors } = parseMcpServers(text);
-      const result = await orchestrator.importServers(servers);
+      const result = await current.importServers(servers);
       respond(res, 200, { ...result, parseErrors: errors });
       return;
     }
 
     if (segments[0] === "events" && method === "GET") {
-      handleSse(req, res);
+      handleSse(current, req, res);
       return;
     }
 
@@ -180,7 +213,7 @@ export function registerRoutes(ctx, { orchestrator, uiStore, getPluginConfig, on
         const storeDoc = uiStore.read();
         respond(res, 200, {
           ui: sanitizeUi(storeDoc.ui),
-          config: getPluginConfig ? getPluginConfig() : (storeDoc.config || null),
+          config: getPluginConfig ? getPluginConfig() : null,
         });
         return;
       }
@@ -191,11 +224,8 @@ export function registerRoutes(ctx, { orchestrator, uiStore, getPluginConfig, on
           updatedUi = sanitizeUi(uiStore.writeUi(sanitizeUi(body.ui)));
         }
         let updatedConfig;
-        if (body?.config !== undefined && typeof uiStore.writeConfig === "function") {
-          updatedConfig = uiStore.writeConfig(body.config);
-          if (typeof onConfigChange === "function") {
-            try { onConfigChange(updatedConfig); } catch {}
-          }
+        if (body?.config !== undefined) {
+          throw new ConsoleError("invalid", "Plugin switches are managed by the official settings form; /config only stores UI placement");
         }
         respond(res, 200, {
           ui: updatedUi ?? sanitizeUi(uiStore.read().ui),
@@ -210,15 +240,15 @@ export function registerRoutes(ctx, { orchestrator, uiStore, getPluginConfig, on
     respond(res, 404, { error: { code: "not_found", message: `unknown route ${method} ${url.pathname}` } });
   }
 
-  async function handleServers(req, res, method, rest) {
+  async function handleServers(current, req, res, method, rest) {
     if (rest.length === 0) {
       if (method === "GET") {
-        respond(res, 200, computeSnapshot(orchestrator));
+        respond(res, 200, viewOf(current));
         return;
       }
       if (method === "POST") {
         const body = await readJson(req);
-        const result = await orchestrator.add(body ?? {});
+        const result = await current.add(body ?? {});
         respond(res, 201, result);
         return;
       }
@@ -230,11 +260,11 @@ export function registerRoutes(ctx, { orchestrator, uiStore, getPluginConfig, on
     if (action === undefined) {
       if (method === "PATCH") {
         const body = await readJson(req);
-        respond(res, 200, await orchestrator.update(name, body ?? {}));
+        respond(res, 200, await current.update(name, body ?? {}));
         return;
       }
       if (method === "DELETE") {
-        respond(res, 200, await orchestrator.remove(name));
+        respond(res, 200, await current.remove(name));
         return;
       }
       respond(res, 405, { error: { code: "method_not_allowed", message: "PATCH or DELETE /servers/:name" } });
@@ -245,14 +275,14 @@ export function registerRoutes(ctx, { orchestrator, uiStore, getPluginConfig, on
       respond(res, 405, { error: { code: "method_not_allowed", message: `POST /servers/:name/${action}` } });
       return;
     }
-    if (action === "enable") respond(res, 200, await orchestrator.setEnabled(name, true));
-    else if (action === "disable") respond(res, 200, await orchestrator.setEnabled(name, false));
-    else if (action === "reconnect") respond(res, 200, await orchestrator.reconnect(name));
-    else if (action === "probe") respond(res, 200, await orchestrator.probe(name));
+    if (action === "enable") respond(res, 200, await current.setEnabled(name, true));
+    else if (action === "disable") respond(res, 200, await current.setEnabled(name, false));
+    else if (action === "reconnect") respond(res, 200, await current.reconnect(name));
+    else if (action === "probe") respond(res, 200, await current.probe(name));
     else respond(res, 404, { error: { code: "not_found", message: `unknown action "${action}"` } });
   }
 
-  function handleSse(req, res) {
+  function handleSse(current, req, res) {
     res.writeHead(200, {
       "content-type": "text/event-stream; charset=utf-8",
       "cache-control": "no-cache, no-transform",
@@ -260,27 +290,32 @@ export function registerRoutes(ctx, { orchestrator, uiStore, getPluginConfig, on
       "x-accel-buffering": "no",
     });
     res.write("retry: 3000\n\n");
-    const send = (frame) => res.write(frame);
-    sseClients.add(send);
+    const client = { orchestrator: current, send: (frame) => res.write(frame), close: () => res.end() };
+    sseClients.add(client);
     // initial snapshot so a freshly opened panel renders immediately
-    send(`event: status_changed\ndata: ${JSON.stringify(computeSnapshot(orchestrator))}\n\n`);
+    client.send(`event: status_changed\ndata: ${JSON.stringify(viewOf(current))}\n\n`);
+    lastSent.set(client, JSON.stringify(viewOf(current)));
     req.on("close", () => {
-      sseClients.delete(send);
+      sseClients.delete(client);
+      res.end();
     });
   }
 
   function dispose() {
+    disposed = true;
     disposeRoute();
     if (heartbeat) clearInterval(heartbeat);
     if (notifyTimer) clearTimeout(notifyTimer);
     for (const client of sseClients) {
       try {
-        client("event: bye\ndata: {}\n\n");
+        client.send("event: bye\ndata: {}\n\n");
+        client.close();
       } catch {
         // already gone
       }
     }
     sseClients.clear();
+    lastSent.clear();
   }
 
   return { dispose, notify };

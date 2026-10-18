@@ -57,6 +57,7 @@ export function computeSnapshot(orchestrator) {
     const entry = orchestrator.ledger.get(name);
     const liveTools = orchestrator.toolsOf(name, currentTools);
     const disabled = new Set(Array.isArray(config.disabledTools) ? config.disabledTools : []);
+    const ambiguous = orchestrator.namespaceConflict?.(name) ?? null;
     const prefix = `mcp__${name}__`;
     const enabled = config.enabled !== false;
     const tools = liveTools.map((publicName) => ({
@@ -72,7 +73,8 @@ export function computeSnapshot(orchestrator) {
       toolCount: liveTools.length,
       enabledToolCount: enabled ? tools.filter((tool) => tool.enabled).length : 0,
       tools,
-      error: entry?.error ?? null,
+      error: ambiguous ?? entry?.error ?? null,
+      ambiguous: ambiguous !== null,
     });
   }
   servers.sort((a, b) => a.name.localeCompare(b.name));

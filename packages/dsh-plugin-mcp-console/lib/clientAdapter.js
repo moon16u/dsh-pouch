@@ -37,6 +37,18 @@ export const MASK = "••••";
 const CLIENT_SPECIFIER = "@deepseek-ai/dsh-mcp-client";
 
 let cachedClient = undefined;
+let scopeReader = () => undefined;
+
+export function clientScopeOf(ctx) {
+  return scopeReader(ctx);
+}
+
+async function loadClient(resolved) {
+  const require = createRequire(resolved);
+  const scope = await import(pathToFileURL(require.resolve("@deepseek-ai/dsh-scope")).href);
+  scopeReader = scope.scopeOf;
+  return import(pathToFileURL(resolved).href);
+}
 
 /** Candidate resolution bases for the official client, most specific first. */
 export function resolutionBases(dshHome) {
@@ -71,7 +83,7 @@ export async function resolveMcpClient() {
       const require = createRequire(join(base, "clientAdapter-anchor.js"));
       const resolved = require.resolve(CLIENT_SPECIFIER);
       if (typeof resolved !== "string" || !existsSync(resolved)) continue;
-      cachedClient = await import(pathToFileURL(resolved).href);
+      cachedClient = await loadClient(resolved);
       return cachedClient;
     } catch (error) {
       attempts.push(`${base}: ${String(error?.message ?? error)}`);
@@ -80,7 +92,7 @@ export async function resolveMcpClient() {
   // fallback: self-context resolution (standalone installs with locally
   // resolvable peer deps — resolves to the same instance there anyway)
   try {
-    cachedClient = await import(CLIENT_SPECIFIER);
+    cachedClient = await loadClient(createRequire(import.meta.url).resolve(CLIENT_SPECIFIER));
     return cachedClient;
   } catch (error) {
     attempts.push(`self: ${String(error?.message ?? error)}`);
@@ -135,6 +147,17 @@ export function validateServerConfig(server) {
   if (transport !== "stdio" && transport !== "streamable-http") {
     return { error: `transport must be "stdio" or "streamable-http" (got ${JSON.stringify(transport)})` };
   }
+  for (const key of ["enabled", "failOnStartupError"]) {
+    if (server[key] !== undefined && typeof server[key] !== "boolean") return { error: `${key} must be a boolean` };
+  }
+  for (const key of ["toolCallTimeoutMs", "maxInstructionBytes"]) {
+    if (server[key] !== undefined && (!Number.isSafeInteger(server[key]) || server[key] <= 0)) return { error: `${key} must be a positive integer` };
+  }
+  if (server.args !== undefined && (!Array.isArray(server.args) || server.args.some(v => typeof v !== "string"))) return { error: "args must be an array of strings" };
+  for (const key of ["env", "headers"]) {
+    const value = server[key];
+    if (value !== undefined && (value === null || typeof value !== "object" || Array.isArray(value) || Object.values(value).some(v => typeof v !== "string"))) return { error: `${key} must map keys to strings` };
+  }
   const config = {
     name,
     enabled: bool(server.enabled, true),
@@ -147,6 +170,7 @@ export function validateServerConfig(server) {
       ? server.disabledTools.filter((item) => typeof item === "string")
       : [],
   };
+  if (server.maxInstructionBytes !== undefined) config.maxInstructionBytes = server.maxInstructionBytes;
   if (transport === "stdio") {
     const command = str(server.command).trim();
     if (command.length === 0) return { error: "stdio transport requires a command" };
@@ -167,6 +191,10 @@ export function validateServerConfig(server) {
       return { error: "reconnect must be an object" };
     }
     config.reconnect = { ...server.reconnect };
+    for (const [key, value] of Object.entries(config.reconnect)) {
+      if (!["enabled", "initialDelayMs", "maxDelayMs", "maxAttempts"].includes(key)) return { error: `unknown reconnect option ${key}` };
+      if (key === "enabled" ? typeof value !== "boolean" : !Number.isSafeInteger(value) || value < 1 || (key !== "maxAttempts" && value > 2147483647)) return { error: `invalid reconnect.${key}` };
+    }
   }
   return { config };
 }
@@ -186,6 +214,7 @@ export function toClientConfig(server) {
     toolCallTimeoutMs: num(server.toolCallTimeoutMs, DEFAULT_TOOL_CALL_TIMEOUT_MS),
     failOnStartupError: bool(server.failOnStartupError, false),
   };
+  if (server.maxInstructionBytes !== undefined) config.maxInstructionBytes = server.maxInstructionBytes;
   if (server.transport === "stdio") {
     config.command = str(server.command);
     config.args = strArray(server.args);

@@ -347,8 +347,24 @@ window.__ModuleLoader__.load({
 
     var McpH = React.createElement;
 
+    function mcpSessionId() {
+      try {
+        var sessions = globalThis.__dshMcpConsoleSession;
+        var id = typeof sessions === "function" ? sessions() : sessions;
+        return typeof id === "string" && id ? id : "";
+      } catch {
+        return "";
+      }
+    }
+
+    function mcpWithSession(path) {
+      var id = mcpSessionId();
+      if (!id) return path;
+      return path + (path.indexOf("?") >= 0 ? "&" : "?") + "sessionId=" + encodeURIComponent(id);
+    }
+
     function mcpApi(path, options) {
-      return fetch("/api/dsh-mcp-console" + path, {
+      return fetch("/api/dsh-mcp-console" + mcpWithSession(path), {
         headers: { "content-type": "application/json" },
         ...options,
       }).then(async function (response) {
@@ -796,67 +812,66 @@ window.__ModuleLoader__.load({
           }, t("importConfirm"))));
     }
 
+    /**
+     * Late-bound settings scope over the official `configForms` entry.
+     *
+     * The console's sections are registered before the optional `configForms`
+     * service resolves, so the scope starts unavailable and is bound to the
+     * real form once it arrives. Every subscriber is re-wired at bind time and
+     * notified, so a card already on screen switches from "unavailable" to the
+     * live switches instead of staying frozen on the first snapshot.
+     */
     function createMcpScope() {
+      var fallback = { enabled: true, announceToAgent: true };
       var listeners = new Set();
-      var config = { enabled: true, announceToAgent: true };
-      var user = {};
-      var status = "ready";
-      var fetched = false;
+      var bindings = new Map(); // listener -> form disposer
+      var form = null;
 
       function notify() {
-        listeners.forEach(function (l) { try { l(); } catch (e) {} });
+        listeners.forEach(function (listener) { try { listener(); } catch (error) {} });
       }
 
-      function fetchConfig() {
-        if (fetched) return;
-        fetched = true;
-        mcpApi("/health").then(function (health) {
-          if (health && health.config) {
-            config = {
-              enabled: health.config.enabled !== false,
-              announceToAgent: health.config.announceToAgent !== false,
-            };
-            status = "ready";
-            notify();
-          }
-        }, function () {
-          config = { enabled: false, announceToAgent: true };
-          status = "ready";
-          notify();
-        });
+      function release() {
+        bindings.forEach(function (off) { if (off) off(); });
+        bindings.clear();
       }
 
       return {
+        /** Attach (or detach) the official form; re-wires and notifies. */
+        bind: function (next) {
+          release();
+          form = next && typeof next.getSnapshot === "function" ? next : null;
+          if (form && typeof form.subscribe === "function") {
+            listeners.forEach(function (listener) { bindings.set(listener, form.subscribe(listener)); });
+          }
+          notify();
+        },
         subscribe: function (listener) {
           listeners.add(listener);
-          return function () { listeners.delete(listener); };
+          if (form && typeof form.subscribe === "function") bindings.set(listener, form.subscribe(listener));
+          return function () {
+            listeners.delete(listener);
+            var off = bindings.get(listener);
+            if (off) { off(); bindings.delete(listener); }
+          };
         },
         getSnapshot: function () {
-          fetchConfig();
+          if (!form) return { status: "unavailable", value: fallback, user: {}, writable: false };
+          var snapshot = form.getSnapshot();
           return {
-            status: status,
-            value: config,
-            user: user,
-            writable: true,
+            status: snapshot.status,
+            value: snapshot.value || fallback,
+            user: snapshot.user || {},
+            writable: snapshot.writable !== false,
           };
         },
         set: function (field, value) {
-          user[field] = value;
-          config[field] = value;
-          notify();
-          return mcpApi("/config", {
-            method: "POST",
-            body: JSON.stringify({ config: { [field]: value } }),
-          }).catch(function () {});
+          if (!form) return Promise.reject(new Error("Official plugin settings are unavailable"));
+          return form.set(field, value);
         },
         unset: function (field) {
-          delete user[field];
-          config[field] = true;
-          notify();
-          return mcpApi("/config", {
-            method: "POST",
-            body: JSON.stringify({ config: { [field]: true } }),
-          }).catch(function () {});
+          if (!form) return Promise.reject(new Error("Official plugin settings are unavailable"));
+          return form.unset(field);
         },
       };
     }
@@ -924,15 +939,17 @@ window.__ModuleLoader__.load({
       // is gone, and EventSource would retry the 404 every few seconds.
       var streamReady = snapshot !== null;
       useEffect(function () {
-        if (!streamReady) return undefined;
-        var source = new EventSource("/api/dsh-mcp-console/events");
+        if (!streamReady || offline) return undefined;
+        var source = new EventSource("/api/dsh-mcp-console" + mcpWithSession("/events"));
         source.addEventListener("status_changed", function (event) {
           try {
             setSnapshot(JSON.parse(event.data));
           } catch {}
         });
+        source.addEventListener("bye", function () { source.close(); setOffline(true); });
+        source.onerror = function () { source.close(); setOffline(true); };
         return function () { source.close(); };
-      }, [streamReady]);
+      }, [streamReady, offline]);
 
       useEffect(function () {
         function onKey(event) {
@@ -1193,6 +1210,9 @@ window.__ModuleLoader__.load({
         modal);
     }
 
+    // Required only where the console cannot work without them. `configForms`
+    // and `sessions` are optional host services: reaching them through
+    // ctx.inject() keeps the console alive on hosts that never composed them.
     var mcpInject = ["slots", "locale"];
 
     /**
@@ -1346,6 +1366,10 @@ window.__ModuleLoader__.load({
       var mcpT = ctx.locale.bind(McpNS);
       var mcpDefaultScope = createMcpScope();
 
+      // Keep the private API online while the master switch is off: this is
+      // the recovery surface (the host only tears down MCP connections).
+      // The section owns the recovery controls and never depends on the
+      // official Plugins tab for its own re-enable path.
       ctx.slots.inject("settings.section", function () {
         return ctx.slots.register({
           name: "settings.section",
@@ -1356,22 +1380,51 @@ window.__ModuleLoader__.load({
         }, McpSection);
       });
 
-      // Settings-GUI card (settings.plugin.item keyed "mcp-console"): the
-      // host half registers the namespace against the official settings
-      // provider; this browser half supplies the card the plugins tab pairs
-      // with it. Deferred on the settingsScope service so hosts without the
-      // settings UI keep the console working (the section above stays).
-      ctx.inject(["settingsScope"], function (scope) {
-        var settingsScope = scope.settingsScope.bind({ namespace: "mcp-console" });
-        scope.slots.inject("settings.plugin.item", function () {
-          return scope.slots.register({
-            name: "settings.plugin.item",
-            key: "mcp-console",
-            locale: McpNS,
-            inject: function () { return { t: mcpT, scope: settingsScope }; },
-          }, McpPluginCard);
+      // The official settings form is the single writer of the plugin's
+      // switches (namespace `ui-mcp-console`), and the Plugins page pairs it
+      // with a card registered under that same key. Both live behind the
+      // optional `configForms` service so a host without the settings UI
+      // keeps the MCP section above working.
+      if (typeof ctx.inject === "function") {
+        ctx.inject(["configForms"], function (scope) {
+          var configForms = scope.configForms;
+          var form = configForms.get("ui-mcp-console");
+          mcpDefaultScope.bind(form);
+          ctx.effect(function () { return function () { form.dispose(); }; }, "mcp-console: settings form");
+          ctx.effect(function () {
+            return configForms.whileServed(["ui-mcp-console"], function () {
+              return ctx.slots.inject("plugins.item", function () {
+                return ctx.slots.register({
+                  name: "plugins.item",
+                  id: "ui-mcp-console",
+                  order: 40,
+                  label: function () { return mcpT("pluginCardTitle"); },
+                  locale: McpNS,
+                  inject: function () { return { t: mcpT, scope: mcpDefaultScope }; },
+                }, McpPluginCard);
+              });
+            });
+          }, "mcp-console: plugin card");
         });
-      });
+      }
+
+      // The session id routes the MCP API to the right project store. Without
+      // this service the console stays global-only and says so through
+      // hasProjectWorkspace=false rather than guessing a workspace.
+      if (typeof ctx.inject === "function") {
+        ctx.inject(["sessions"], function (scope) {
+          var sessions = scope.sessions;
+          globalThis.__dshMcpConsoleSession = function () {
+            try {
+              var list = sessions && sessions.list && sessions.list.getSnapshot();
+              if (!list) return "";
+              var byId = list.byId || {};
+              var id = Object.keys(byId).find(function (key) { return ((byId[key].retainedBy || {}).mainView || 0) > 0; });
+              return id || "";
+            } catch { return ""; }
+          };
+        });
+      }
     }
 
     exports.McpSection = McpSection;
