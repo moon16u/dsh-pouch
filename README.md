@@ -10,7 +10,7 @@
 [![DeepSeek Harness](https://img.shields.io/badge/DSH-0.2.1--rc.1-purple.svg)](https://github.com/deepseek-ai/deepseek-harness)
 [![pnpm workspace](https://img.shields.io/badge/pnpm-workspace-orange.svg)](https://pnpm.io/workspaces)
 
-> **dsh-pouch** is a monorepo of five independent, standalone [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) plugins.
+> **dsh-pouch** is a monorepo of four independent, standalone [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) plugins.
 > The repository root is only a pnpm workspace — it is **not** a DSH bundle, not installable, and never published to npm. Install only the plugins you need.
 
 ---
@@ -22,7 +22,6 @@
 | **[`@moon16u/dsh-plugin-restart`](./packages/dsh-plugin-restart)** | Host / Web UI | Safe, detached DSH process restart commands (`/restart`, `/dsh-restart`) and agent tool (`dsh_restart`) with native Web UI candidate styling. |
 | **[`@moon16u/dsh-plugin-current-time`](./packages/dsh-plugin-current-time)** | Host / Agent | Injects the host's real date, time, and timezone into agent context at the start of every turn, so a long-running session never reasons from a stale date. |
 | **[`@moon16u/dsh-plugin-session-copy`](./packages/dsh-plugin-session-copy)** | Web UI | Native-styled Copy menu in the web session header for the session title, session directory path, and working directory. |
-| **[`@moon16u/dsh-plugin-web-search-tavily`](./packages/dsh-plugin-web-search-tavily)** | Capability Seam | Real-time web search provider backed by the Tavily REST API, seamlessly integrating with DSH's `ctx.web` capability seam. |
 | **[`@moon16u/dsh-plugin-mcp-console`](./packages/dsh-plugin-mcp-console)** | Web UI + Host | MCP server console in the settings page: runtime add/edit/enable/disable/reconnect/delete, per-tool switches, live status over SSE, and mcpServers JSON import. Zero MCP protocol code — everything rides the official `@deepseek-ai/dsh-mcp-client`. Profile-YAML MCP entries are auto-migrated into dynamic management on boot/refresh (and exportable back). |
 
 ---
@@ -35,13 +34,10 @@ Each plugin is its own DSH bundle with its own npm package and version. Install 
 dsh plugin --profile web add @moon16u/dsh-plugin-restart
 dsh plugin --profile web add @moon16u/dsh-plugin-current-time
 dsh plugin --profile web add @moon16u/dsh-plugin-session-copy
-dsh plugin --profile web add @moon16u/dsh-plugin-web-search-tavily
 dsh plugin --profile web add @moon16u/dsh-plugin-mcp-console
 ```
 
 **Restart `dsh web` once** after installing (bundle layers compose at startup). No manual `cordis.patch.yml` edits are needed — every package carries its own patch.
-
-`web-search-tavily` registers the provider but does not select it. To make Tavily the active search provider, add the one-line `web` override documented in [its README](./packages/dsh-plugin-web-search-tavily/README.md).
 
 ### From a local checkout
 
@@ -52,7 +48,7 @@ dsh plugin --profile web add file:~/dsh-pouch/packages/dsh-plugin-restart
 
 ### Migrating from the old all-in-one bundle
 
-`@moon16u/dsh-pouch` used to be a single bundle that loaded all five plugins. The last bundle release is **0.7.3**, now deprecated and no longer updated. If your profile still depends on it, remove it **before** installing the individual packages:
+`@moon16u/dsh-pouch` used to be a single bundle that loaded all the plugins. The last bundle release is **0.7.3**, now deprecated and no longer updated. If your profile still depends on it, remove it **before** installing the individual packages:
 
 ```bash
 dsh plugin --profile web remove @moon16u/dsh-pouch
@@ -76,11 +72,7 @@ Do not keep the old bundle and the standalone packages installed together — bo
 * **Problem**: Getting the current session's storage folder, title, or working directory out of the UI means digging through URLs, console logs, or the filesystem by hand.
 * **Solution**: Injects a native-styled **Copy** button into the web header utility bar. It opens a menu with three targets — **Session title**, **Session directory** (the session's real on-disk folder path, home prefix abbreviated to `~`), and **Working directory** — each disabled with a stated reason until its value exists. The directory comes from one authenticated, read-only host route over the JSONL backend's public `resolveCurrentLog`; it only locates current-format logs, never reads log contents, and takes no write lease. An empty result may mean an unwritten session or an unsupported log format; older generations remain unavailable.
 
-### 4. `@moon16u/dsh-plugin-web-search-tavily`
-* **Problem**: Built-in search engines may be restricted or lack high-quality synthesized web answers.
-* **Solution**: Formally implements the `ctx.web.registerSearchProvider` contract. Automatically resolves API keys from the `TAVILY_API_KEY` environment variable or DSH Credentials service.
-
-### 5. `@moon16u/dsh-plugin-mcp-console`
+### 4. `@moon16u/dsh-plugin-mcp-console`
 * **Problem**: The official way to attach MCP servers is a static `cordis.patch.yml` entry — no GUI, no runtime changes, and every restart to apply an edit. Declared servers show up as untouchable read-only instances.
 * **Solution**: A full **MCP servers** settings section managing the official `@deepseek-ai/dsh-mcp-client` at runtime: one fiber per server via cordis dynamic assembly (hot edit, no DSH restart), master switches, per-tool enable/disable pills, live status + tool lists over SSE, and mcpServers JSON import. External agents writing MCP entries into `cordis.patch.yml` are handled by an auto-ingest engine: on boot/refresh the entries are migrated into `~/.dsh/dsh-mcp.json` (fiber takeover included, YAML trimmed precisely), reversible via `POST /export-yaml`. Secrets stay masked in every API response.
 

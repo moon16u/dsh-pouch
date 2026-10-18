@@ -10,7 +10,7 @@
 [![DeepSeek Harness](https://img.shields.io/badge/DSH-0.2.1--rc.1-purple.svg)](https://github.com/deepseek-ai/deepseek-harness)
 [![pnpm workspace](https://img.shields.io/badge/pnpm-workspace-orange.svg)](https://pnpm.io/workspaces)
 
-> **dsh-pouch** 是一个包含五个**相互独立、可单独安装**的 [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) 插件的 monorepo。
+> **dsh-pouch** 是一个包含四个**相互独立、可单独安装**的 [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) 插件的 monorepo。
 > 仓库根目录只是 pnpm workspace——它**不是** DSH bundle，不能安装，也从不发布到 npm。按需安装其中任意插件即可。
 
 ---
@@ -22,7 +22,6 @@
 | **[`@moon16u/dsh-plugin-restart`](./packages/dsh-plugin-restart)** | Host / Web UI | 提供 `/restart` 与 `/dsh-restart` 命令、原生 `🔄 重启` 候选菜单与 `dsh_restart` Agent 工具，实现进程分离的安全 3 秒平滑重启。 |
 | **[`@moon16u/dsh-plugin-current-time`](./packages/dsh-plugin-current-time)** | Host / Agent | 每轮对话开始时向 Agent 上下文注入宿主机的真实日期、时间与时区，长会话跨天也不会再按旧日期推理。 |
 | **[`@moon16u/dsh-plugin-session-copy`](./packages/dsh-plugin-session-copy)** | Web UI | Web 会话顶栏的原生风格「复制」菜单：会话标题、会话目录路径、工作目录。 |
-| **[`@moon16u/dsh-plugin-web-search-tavily`](./packages/dsh-plugin-web-search-tavily)** | Capability Seam | 基于 Tavily REST API 的真实网络搜索提供方，无缝接入 DSH 官方 `ctx.web` 网络能力标准。 |
 | **[`@moon16u/dsh-plugin-mcp-console`](./packages/dsh-plugin-mcp-console)** | Web UI + Host | 设置页「MCP 服务器」控制台：运行时增删改/启停/重连、工具级开关、SSE 实时状态、mcpServers JSON 导入。零 MCP 协议代码——全部复用官方 `@deepseek-ai/dsh-mcp-client`；profile YAML 里的 MCP 条目在启动/刷新时自动移植为动态管理（可逆回写）。 |
 
 ---
@@ -35,13 +34,10 @@
 dsh plugin --profile web add @moon16u/dsh-plugin-restart
 dsh plugin --profile web add @moon16u/dsh-plugin-current-time
 dsh plugin --profile web add @moon16u/dsh-plugin-session-copy
-dsh plugin --profile web add @moon16u/dsh-plugin-web-search-tavily
 dsh plugin --profile web add @moon16u/dsh-plugin-mcp-console
 ```
 
 安装后**重启一次 `dsh web`**（bundle 层只在启动时组合）。无需手改 `cordis.patch.yml`——每个包都自带挂载补丁。
-
-`web-search-tavily` 只注册提供方、不自动选中。想让它作为活跃搜索提供方，按[它自己的 README](./packages/dsh-plugin-web-search-tavily/README.zh-CN.md) 加一行 `web` 覆盖即可。
 
 ### 从本地检出的仓库安装
 
@@ -52,7 +48,7 @@ dsh plugin --profile web add file:~/dsh-pouch/packages/dsh-plugin-restart
 
 ### 从旧的一体化 bundle 迁移
 
-`@moon16u/dsh-pouch` 曾经是一个加载全部五个插件的单一 bundle。最后一个 bundle 版本是 **0.7.3**，现已弃用、不再更新。如果你的 profile 仍依赖它，请**先移除**再安装各独立包：
+`@moon16u/dsh-pouch` 曾经是一个加载全部插件的单一 bundle。最后一个 bundle 版本是 **0.7.3**，现已弃用、不再更新。如果你的 profile 仍依赖它，请**先移除**再安装各独立包：
 
 ```bash
 dsh plugin --profile web remove @moon16u/dsh-pouch
@@ -76,11 +72,7 @@ dsh plugin --profile web remove @moon16u/dsh-pouch
 * **痛点**：想拿到当前会话的存储目录、标题或工作目录，只能去翻 URL、控制台日志或手工找文件系统。
 * **解决**：在 Web 顶栏工具区注入原生风格的「复制」按钮，点开是一个三项菜单——**会话标题**、**会话目录**（会话真实存储文件夹路径，home 前缀缩写为 `~`）、**工作目录**；某项取值尚不存在时该项禁用并说明原因。目录由宿主侧唯一一个认证只读路由基于 JSONL 后端的公开 `resolveCurrentLog` 解析，复制的是纯路径，仅定位当前格式日志，不读取日志内容，也不取写租约；空返回可能表示尚未落盘或日志格式不受支持，旧代际暂不可定位。
 
-### 4. `@moon16u/dsh-plugin-web-search-tavily`
-* **痛点**：默认搜索引擎可能受限或无法获取高质量结构化检索结果。
-* **解决**：标准实现 DSH 的 `ctx.web.registerSearchProvider` 接口，支持通过环境变量 `TAVILY_API_KEY` 或 DSH Credentials 凭据管理服务安全解析密钥。
-
-### 5. `@moon16u/dsh-plugin-mcp-console`
+### 4. `@moon16u/dsh-plugin-mcp-console`
 * **痛点**：官方接入 MCP 的方式是往 `cordis.patch.yml` 写静态条目——没有 GUI、不能运行时增删改，每次改动都要重启；声明出来的服务器在面板里只能是只读摆设。
 * **方案**：设置页新增完整的**MCP 服务器**管理页，基于 cordis 动态装配运行时编排官方 `@deepseek-ai/dsh-mcp-client`（每台一个 fiber，热更新配置、免重启 DSH）：主开关、工具级启停胶囊、SSE 实时状态与工具列表、mcpServers JSON 一键导入。外部 Agent 写进 `cordis.patch.yml` 的 MCP 条目由 Auto-Ingest 引擎接管：启动/刷新时连根移植进 `~/.dsh/dsh-mcp.json`（含 fiber 接管与条目级 YAML 精确修剪），`POST /export-yaml` 可逆回写。所有 API 响应中的凭据一律打码。
 
