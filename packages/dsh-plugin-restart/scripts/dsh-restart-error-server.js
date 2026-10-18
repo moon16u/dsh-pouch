@@ -94,11 +94,12 @@ function tailFile(path, maxLines = 40) {
 }
 
 function logSections(cfg) {
-  const scriptScheduleLog = `${cfg.scriptPath}.schedule.log`;
   return [
     [join(cfg.profileHome, "dsh-restart.log"), "dsh-restart.log", "重启 worker 输出"],
     [join(cfg.profileHome, "dsh-web.out.log"), "dsh-web.out.log", "新 DSH 进程输出（崩溃原因通常在这里）"],
-    [scriptScheduleLog, "dsh-restart.sh.schedule.log", "helper/定时触发的外层日志"],
+    // Lives in the profile home, not next to the shipped script: a package
+    // directory is read-only under some installs (and must not collect logs).
+    [join(cfg.profileHome, "dsh-restart.schedule.log"), "dsh-restart.schedule.log", "helper/定时触发的外层日志"],
     [join(cfg.profileHome, "dsh-restart-helper.log"), "dsh-restart-helper.log", "重启 helper 自身的错误"],
   ].map(([path, name, desc]) => ({ path, name, desc, tail: tailFile(path) }));
 }
@@ -283,18 +284,34 @@ function handleRetry(res) {
     delete env.DSH_RESTART_DETACHED;
     delete env.DSH_SHELL;
     env.DSH_RESTART_ALLOWED = "1";
+    const scriptPath = config.scriptPath;
 
-    console.log(`[${new Date().toISOString()}] retry requested: releasing port and rerunning ` +
-      `bash ${config.scriptPath} ${JSON.stringify(RESTART_ARGS)}`);
-    const child = spawn("/bin/bash", [config.scriptPath, ...RESTART_ARGS], {
-      detached: true,
-      stdio: "ignore",
-      env,
-    });
-    child.unref();
+    let started = false;
+    // 端口必须先释放，再让 launcher 开跑：
+    //  * 新的 worker 用「任何 HTTP 应答都算就绪」探测端口，本报错页同样会应答，
+    //    在监听期启动就等于让 worker 把报错页当成 DSH 已上线，误报成功并清掉
+    //    restart-failed.json；
+    //  * 反过来先拉起再退出，则是新进程抢一个仍被占用的端口（EADDRINUSE）。
+    // 因此在 server.close() 回调里才 spawn，且只 spawn 一次。
+    const startLauncher = () => {
+      if (started) return;
+      started = true;
+      console.log(`[${new Date().toISOString()}] retry requested: port released, rerunning ` +
+        `bash ${scriptPath} ${JSON.stringify(RESTART_ARGS)}`);
+      const child = spawn("/bin/bash", [scriptPath, ...RESTART_ARGS], {
+        detached: true,
+        stdio: "ignore",
+        env,
+      });
+      child.unref();
+      process.exit(0);
+    };
 
-    // 给 launcher 一点完成 setsid 的时间，然后释放端口退出。
-    setTimeout(() => process.exit(0), 400);
+    server.close(startLauncher);
+    // 浏览器那条 keep-alive 连接不会自己消失；主动断掉空闲连接，close 才能完成。
+    if (typeof server.closeIdleConnections === "function") server.closeIdleConnections();
+    // 兜底：极端情况下 close 迟迟不回调，也不能让重试永远不重跑。
+    setTimeout(startLauncher, 1000);
   });
 }
 

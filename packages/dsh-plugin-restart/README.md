@@ -25,7 +25,7 @@ dsh plugin --profile web add @moon16u/dsh-plugin-restart
 ```bash
 npm test
 ```
-The suite sets `DSH_RESTART_DRY_RUN=1`, which makes scheduling write the helper file but never spawn it. Without this flag every handler invocation schedules a REAL detached restart of whatever DSH instance `$DSH_HOME` points at.
+The suite sets `DSH_RESTART_DRY_RUN=1`, which makes scheduling write the helper file but never spawn it, and points `DSH_HOME` at a temporary directory so the helper it writes can never overwrite a live instance's. Without the flag every handler invocation schedules a REAL detached restart of whatever DSH instance `$DSH_HOME` points at.
 
 ## License
 [MIT](../../LICENSE)

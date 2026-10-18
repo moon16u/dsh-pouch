@@ -35,16 +35,24 @@
 # $PROFILE_HOME/restart-failed.json; a successful restart removes it.
 #
 # Usage:
-#   dsh-restart.sh                # production: dsh --profile web (default port 3080)
-#   dsh-restart.sh dev            # dev: DSH_HOME=~/.dsh-dev dsh web --port 18888
-#   dsh-restart.sh --port 8080    # production on another port
-#   dsh-restart.sh --explain      # print environment/usage guidance and exit
+#   dsh-restart.sh                     # ~/.dsh on port 3080 (dsh --profile web)
+#   dsh-restart.sh dev                 # dev: ~/.dsh-dev, dsh web --port 18888
+#   dsh-restart.sh --port 8080         # the default home on another port
+#   dsh-restart.sh --profile-home DIR  # an instance whose DSH_HOME is DIR
+#   dsh-restart.sh --explain           # print environment/usage guidance and exit
+#
+# The target instance is chosen by --profile-home, then DSH_HOME, then the mode
+# default; the plugin always passes --profile-home so the instance that asked
+# for the restart is the one restarted.
 # ============================================================================
 set -euo pipefail
 
 # --explain: print the guidance embedded above and exit without doing anything.
+# The banner is the whole comment block between the shebang line and the first
+# `set` statement, so it stays complete when the block grows.
 if [[ "${1:-}" == "--explain" ]]; then
-  sed -n '2,27p' "$0"
+  end="$(grep -n -m1 '^set -' "$0" | cut -d: -f1)"
+  sed -n "2,$((end - 2))p" "$0"
   exit 0
 fi
 
@@ -71,28 +79,17 @@ if [[ "${DSH_RESTART_ALLOWED:-}" != "1" && -n "${DSH_SHELL:-}" ]]; then
   exit 1
 fi
 
-if [[ "${DSH_RESTART_DETACHED:-}" != "1" ]]; then
-  # --- launcher mode: re-exec self as a detached worker and return ---
-  MODE="${1:-prod}"
-  if [[ "$MODE" == "dev" ]]; then
-    PROFILE_HOME="$HOME/.dsh-dev"
-  else
-    PROFILE_HOME="$HOME/.dsh"
-  fi
-  LOG="$PROFILE_HOME/dsh-restart.log"
-  mkdir -p "$PROFILE_HOME"
-  : > "$LOG"
-  nohup setsid env DSH_RESTART_DETACHED=1 bash "$0" "$@" >>"$LOG" 2>&1 < /dev/null &
-  echo "dsh-restart worker launched (pid $!), see $LOG"
-  exit 0
-fi
-
-# --- worker mode: this process is already detached, do the real work ---
-# Normalize arguments so --delay/--port can appear before or after mode.
-ARGS=("$@")
+# --- argument parsing (shared by launcher and worker) ------------------------
+# The launcher needs PROFILE_HOME before it can decide where the worker log
+# lives, and the worker is re-executed with the same argv, so both parse here
+# rather than each keeping its own copy. ORIG_ARGS is captured first: the loop
+# below shifts the positional parameters away, and the launcher re-exec must
+# still see the caller's full argv.
+ORIG_ARGS=("$@")
 DELAY_MS=0
 MODE="prod"
 PORT_ARG=""
+PROFILE_HOME_ARG=""
 EXTRA_ARGS=()
 
 while [[ $# -gt 0 ]]; do
@@ -102,7 +99,11 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --port)
-      PORT_ARG="$2"
+      PORT_ARG="${2:-}"
+      shift 2
+      ;;
+    --profile-home)
+      PROFILE_HOME_ARG="${2:-}"
       shift 2
       ;;
     dev)
@@ -115,14 +116,36 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ "$MODE" == "dev" ]]; then
-  EXTRA_ARGS=(--port 18888)
+# Which DSH home this restart targets. An explicit --profile-home wins, then
+# the DSH_HOME of the calling instance, then the mode default. Reading only the
+# mode default would restart ~/.dsh whenever an instance ran on any other home.
+if [[ -n "$PROFILE_HOME_ARG" ]]; then
+  PROFILE_HOME="$PROFILE_HOME_ARG"
+elif [[ -n "${DSH_HOME:-}" ]]; then
+  PROFILE_HOME="$DSH_HOME"
+elif [[ "$MODE" == "dev" ]]; then
   PROFILE_HOME="$HOME/.dsh-dev"
-  PROFILE_DIR="$PROFILE_HOME/profiles/web"
-  PORT=18888
 else
   PROFILE_HOME="$HOME/.dsh"
-  PROFILE_DIR="$PROFILE_HOME/profiles/web"
+fi
+PROFILE_HOME="${PROFILE_HOME%/}"
+
+if [[ "${DSH_RESTART_DETACHED:-}" != "1" ]]; then
+  # --- launcher mode: re-exec self as a detached worker and return ---
+  LOG="$PROFILE_HOME/dsh-restart.log"
+  mkdir -p "$PROFILE_HOME"
+  : > "$LOG"
+  nohup setsid env DSH_RESTART_DETACHED=1 bash "$0" "${ORIG_ARGS[@]}" >>"$LOG" 2>&1 < /dev/null &
+  echo "dsh-restart worker launched (pid $!), see $LOG"
+  exit 0
+fi
+
+# --- worker mode: this process is already detached, do the real work ---
+PROFILE_DIR="$PROFILE_HOME/profiles/web"
+if [[ "$MODE" == "dev" ]]; then
+  EXTRA_ARGS=(--port 18888)
+  PORT=18888
+else
   PORT=3080
   if [[ -n "$PORT_ARG" ]]; then
     PORT="$PORT_ARG"
@@ -142,12 +165,25 @@ fi
 serve_error_page_and_fail() {
   local reason="$1"
   local cfg="$PROFILE_HOME/restart-failed.json"
-  local args_json="[]"
+  # Reconstruct the argv that reproduces this exact restart, including the home
+  # it targeted: the retry button must restart the same instance, not the mode
+  # default (which is a different instance whenever --profile-home was used).
+  local args_json="[" sep=""
+  append_arg_json() {
+    args_json+="${sep}\"$1\""
+    sep=", "
+  }
   if [[ "$MODE" == "dev" ]]; then
-    args_json='["dev"]'
+    append_arg_json "dev"
   elif [[ -n "${PORT_ARG:-}" ]]; then
-    args_json="[\"--port\", \"$PORT_ARG\"]"
+    append_arg_json "--port"
+    append_arg_json "$PORT_ARG"
   fi
+  if [[ -n "${PROFILE_HOME_ARG:-}" ]]; then
+    append_arg_json "--profile-home"
+    append_arg_json "$PROFILE_HOME_ARG"
+  fi
+  args_json+="]"
 
   # Port probe WITHOUT -f: ANY http answer counts — a previous error page
   # instance, or an old DSH that survived the kill. Either way someone is
@@ -163,9 +199,13 @@ serve_error_page_and_fail() {
   # retry counter: the error-page server increments it on every retry press,
   # and each repeated failure rewrites this file — without this the count
   # would reset to zero on every cycle.
+  # `|| true` is load-bearing: sed exits 2 on a missing file and pipefail+set -e
+  # would abort the whole worker here — before the marker is written and before
+  # the error page starts. That is the normal first-failure case (a successful
+  # restart removes the marker), so without this the fallback never runs at all.
   local prev_retries prev_last
-  prev_retries="$(sed -n 's/.*"retryCount": \([0-9]\{1,\}\).*/\1/p' "$cfg" 2>/dev/null | tail -1)"
-  prev_last="$(sed -n 's/.*"lastRetryAt": "\([^"]*\)".*/\1/p' "$cfg" 2>/dev/null | tail -1)"
+  prev_retries="$(sed -n 's/.*"retryCount": *\([0-9]\{1,\}\).*/\1/p' "$cfg" 2>/dev/null | tail -1 || true)"
+  prev_last="$(sed -n 's/.*"lastRetryAt": *"\([^"]*\)".*/\1/p' "$cfg" 2>/dev/null | tail -1 || true)"
   cat > "$cfg" <<EOF
 {
   "time": "$(date '+%Y-%m-%dT%H:%M:%S')",
@@ -212,15 +252,32 @@ echo "=== dsh-restart worker $(date '+%F %T') ==="
 echo "mode: $MODE  profile: $PROFILE_HOME  port: $PORT"
 
 # --- systemd delegation -----------------------------------------------------
-# When running in standard production mode (MODE=prod without a custom --port)
-# and dsh.service is active under systemd, delegate the restart to systemctl.
-# This prevents port conflicts between script kill/nohup and systemd auto-heal.
-if [[ "$MODE" == "prod" && -z "${PORT_ARG:-}" ]] && systemctl --user is-active --quiet dsh.service 2>/dev/null; then
+# When the target is the unit's own instance (prod mode, default port, default
+# home ~/.dsh — the unit sets no DSH_HOME) and dsh.service is active, delegate
+# the restart to systemctl. This prevents port conflicts between script
+# kill/nohup and systemd auto-heal. A custom --profile-home or --port names an
+# instance the unit does not own, so delegating would restart the wrong one.
+if [[ "$MODE" == "prod" && -z "${PORT_ARG:-}" && "$PROFILE_HOME" == "$HOME/.dsh" ]] && systemctl --user is-active --quiet dsh.service 2>/dev/null; then
   echo "detected active systemd service: dsh.service; delegating restart to systemctl..."
   if systemctl --user restart dsh.service; then
-    NEW_PID=$(systemctl --user show --property MainPID --value dsh.service)
-    echo "systemctl restart command issued, new pid: $NEW_PID"
-    echo "$NEW_PID" > "$PROFILE_HOME/dsh-restart.pid"
+    # MainPID reads 0 until systemd has spawned the replacement, and `kill -0 0`
+    # succeeds (it addresses the process group), so an unparsed 0 must never
+    # reach the liveness check below — it would report a dead service as alive.
+    NEW_PID=""
+    for _ in $(seq 1 40); do
+      candidate="$(systemctl --user show --property MainPID --value dsh.service 2>/dev/null || true)"
+      if [[ "$candidate" =~ ^[1-9][0-9]*$ ]]; then
+        NEW_PID="$candidate"
+        break
+      fi
+      sleep 0.25
+    done
+    echo "systemctl restart command issued, new pid: ${NEW_PID:-unknown}"
+    if [[ -n "$NEW_PID" ]]; then
+      echo "$NEW_PID" > "$PROFILE_HOME/dsh-restart.pid"
+    else
+      echo "warning: dsh.service reported no main pid; relying on the readiness probe" >&2
+    fi
     WAIT_FOR_READINESS_ONLY=1
   else
     echo "warning: systemctl --user restart dsh.service failed, falling back to manual process kill"
@@ -230,28 +287,70 @@ fi
 if [[ "${WAIT_FOR_READINESS_ONLY:-0}" != "1" ]]; then
 
 # Find the currently running DSH web process bound to the target profile.
-PIDS=""
-if [[ "$MODE" == "dev" ]]; then
-  PIDS=$(pgrep -f 'dsh web --port 18888' || true)
-else
-  # Match both launch spellings: `dsh --profile web` (this script) and plain
-  # `dsh web` with DSH_HOME picking the profile; [n]ode keeps the pattern
-  # from matching this script's own command line.
-  PIDS=$(pgrep -f '[n]ode .*/dsh( --profile web| web)( |$)' || true)
-fi
+# The pattern alone cannot tell instances apart: the production spelling
+# `dsh --profile web` and the dev spelling `dsh web --port 18888` both match it
+# (19888 included), so the DSH_HOME of each candidate decides.
+find_dsh_pids() {
+  local pid cmdline process_home
+  for pid in $(pgrep -f '[n]ode .*/dsh( --profile web| web)( |$)' || true); do
+    cmdline="$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null || true)"
+    process_home="$(tr '\0' '\n' < "/proc/$pid/environ" 2>/dev/null | sed -n 's/^DSH_HOME=//p' | tail -1 || true)"
+    # No DSH_HOME in the environment means the process took its own default,
+    # which is only this profile when the profile is the default one.
+    process_home="${process_home:-$HOME/.dsh}"
+    process_home="${process_home%/}"
+    if [[ "$process_home" != "$PROFILE_HOME" ]]; then
+      echo "note: leaving pid $pid alone (DSH_HOME=$process_home)" >&2
+      continue
+    fi
+    echo "$pid"
+  done
+}
+PIDS="$(find_dsh_pids | paste -sd ' ' -)"
+
+# Carry the running process's working directory across the restart. The
+# systemd unit pins WorkingDirectory; a manual relaunch from $HOME silently
+# moved every new Session's default workspace there. Reading /proc keeps the
+# relaunch faithful to whatever actually launched the process being replaced.
+OLD_CWD=""
+for pid in $PIDS; do
+  candidate="$(readlink "/proc/$pid/cwd" 2>/dev/null || true)"
+  if [[ -n "$candidate" && -d "$candidate" ]]; then
+    OLD_CWD="$candidate"
+    break
+  fi
+done
 
 if [[ -n "$PIDS" ]]; then
   echo "stopping DSH: $PIDS"
   kill $PIDS 2>/dev/null || true
-  # Wait for the old process(es) to exit and release the port.
+  # Wait for the old process(es) to exit and release the port. SIGTERM gets
+  # 10s; a process that outlives it is holding the port, and starting the
+  # replacement anyway would only make the new one die on EADDRINUSE.
   for _ in $(seq 1 50); do
-    ALIVE=0
+    ALIVE=""
     for pid in $PIDS; do
-      if kill -0 "$pid" 2>/dev/null; then ALIVE=1; fi
+      if kill -0 "$pid" 2>/dev/null; then ALIVE="$ALIVE $pid"; fi
     done
-    if [[ "$ALIVE" == "0" ]]; then break; fi
+    if [[ -z "$ALIVE" ]]; then break; fi
     sleep 0.2
   done
+  if [[ -n "${ALIVE:-}" ]]; then
+    echo "warning: still alive after SIGTERM:$ALIVE; sending SIGKILL" >&2
+    # Word-split is intended: ALIVE is a space-separated pid list.
+    kill -KILL $ALIVE 2>/dev/null || true
+    for _ in $(seq 1 25); do
+      STILL=""
+      for pid in $ALIVE; do
+        if kill -0 "$pid" 2>/dev/null; then STILL="$STILL $pid"; fi
+      done
+      if [[ -z "$STILL" ]]; then break; fi
+      sleep 0.2
+    done
+    if [[ -n "${STILL:-}" ]]; then
+      serve_error_page_and_fail "旧 DSH 进程未被杀死，端口无法释放 (old DSH process survived SIGKILL:$STILL)"
+    fi
+  fi
   sleep 1
 else
   echo "no existing DSH process found, starting fresh"
@@ -276,7 +375,7 @@ fi
 echo "starting DSH ($MODE)  NODE_USE_ENV_PROXY=$NODE_USE_ENV_PROXY  NODE_OPTIONS=$NODE_OPTIONS"
 DSH_EXEC="${DSH_BIN:-$(which dsh 2>/dev/null || echo "$HOME/node/bin/dsh")}"
 if [[ "$MODE" == "dev" ]]; then
-  cd "${DSH_WORKSPACE:-$PWD}"
+  cd "${DSH_WORKSPACE:-${OLD_CWD:-$PWD}}"
   # -u DSH_RESTART_DETACHED/-u DSH_SHELL/-u DSH_RESTART_ALLOWED: never leak
   # the launcher's markers into the DSH environment. A worker carries
   # DSH_RESTART_DETACHED=1; if the started DSH inherits it, the NEXT
@@ -285,11 +384,14 @@ if [[ "$MODE" == "dev" ]]; then
   # too: combined with an inherited DSH_SHELL it would silently bypass the
   # "refuse to restart from inside a DSH session" guard.
   DSH_HOME="$PROFILE_HOME" \
-  nohup setsid env -u DSH_RESTART_DETACHED -u DSH_SHELL -u DSH_RESTART_ALLOWED "$DSH_EXEC" web "${EXTRA_ARGS[@]}" >>"$PROFILE_HOME/dsh-web.out.log" 2>&1 < /dev/null &
+  nohup setsid env -u DSH_RESTART_DETACHED -u DSH_SHELL -u DSH_RESTART_ALLOWED "$DSH_EXEC" web --no-open "${EXTRA_ARGS[@]}" >>"$PROFILE_HOME/dsh-web.out.log" 2>&1 < /dev/null &
 else
-  cd "${DSH_WORKSPACE:-$HOME}"
+  # --no-open: the tab that requested the restart reconnects on its own; without
+  # it every restart opened a second tab with a fresh launch token. The systemd
+  # unit already passes it — only this hand-launched path was missing it.
+  cd "${DSH_WORKSPACE:-${OLD_CWD:-$HOME}}"
   DSH_HOME="$PROFILE_HOME" \
-  nohup setsid env -u DSH_RESTART_DETACHED -u DSH_SHELL -u DSH_RESTART_ALLOWED "$DSH_EXEC" --profile web "${EXTRA_ARGS[@]}" >>"$PROFILE_HOME/dsh-web.out.log" 2>&1 < /dev/null &
+  nohup setsid env -u DSH_RESTART_DETACHED -u DSH_SHELL -u DSH_RESTART_ALLOWED "$DSH_EXEC" --profile web --no-open "${EXTRA_ARGS[@]}" >>"$PROFILE_HOME/dsh-web.out.log" 2>&1 < /dev/null &
 fi
 
 NEW_PID=$!
@@ -303,7 +405,9 @@ fi # end if [[ "${WAIT_FOR_READINESS_ONLY:-0}" != "1" ]]
 # still held by an old process we failed to kill), the port probe below would
 # pass against that stale process and report a false "DSH is up".
 for _ in $(seq 1 60); do
-  if ! kill -0 "$NEW_PID" 2>/dev/null; then
+  # Only a real pid can be probed. An empty NEW_PID means the systemd branch
+  # never learned it; the readiness probe below is then the sole verdict.
+  if [[ -n "$NEW_PID" ]] && ! kill -0 "$NEW_PID" 2>/dev/null; then
     serve_error_page_and_fail "新进程启动即退出 (new DSH process exited during startup)"
   fi
   # Readiness probe WITHOUT -f, same as the two probes above: DSH answers 401

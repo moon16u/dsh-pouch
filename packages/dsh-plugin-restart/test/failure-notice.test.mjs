@@ -38,6 +38,26 @@ test("apply registers the failure-notice prompt section", async () => {
   assert.equal(typeof sections[0].text, "function");
 });
 
+test("apply registers the section through ctx.inject, not a one-shot ctx.get", async () => {
+  const { apply } = await import("../lib/index.js");
+  const requested = [];
+  const sections = [];
+  apply({
+    // A registry that only becomes available later: ctx.get returns undefined
+    // at apply time, and only the injected callback ever sees the service.
+    get: () => undefined,
+    commands: { register() {} },
+    tools: { register() {} },
+    inject(deps, callback) {
+      requested.push(deps);
+      callback({ get: (name) => (name === "systemPrompt" ? { section: (s) => sections.push(s) } : undefined) });
+    },
+  });
+  assert.deepEqual(requested, [["systemPrompt"]]);
+  assert.equal(sections.length, 1);
+  assert.equal(sections[0].name, "dsh-restart:failure-notice");
+});
+
 test("apply tolerates a runtime whose ctx has no optional-service getter", async () => {
   const { apply } = await import("../lib/index.js");
   // Real cordis contexts always provide commands/tools (hard deps), but the

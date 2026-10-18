@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { readFileSync, statSync, mkdirSync, writeFileSync } from "node:fs";
@@ -9,7 +8,6 @@ import { defineTool } from "@deepseek-ai/dsh-tools";
 export const name = "dsh-restart";
 export const inject = ["commands", "tools"];
 
-const DEFAULT_DELAY_MS = 3000;
 // Fixed restart delay: the user wants every restart to happen 3 seconds after
 // the request. Even if a model passes delay_ms (e.g. 15000), it is ignored and
 // replaced with this constant.
@@ -25,17 +23,37 @@ function currentDshHome() {
   return process.env.DSH_HOME || join(homedir(), ".dsh");
 }
 
-function scheduleDetachedRestart(delayMs = DEFAULT_DELAY_MS) {
+function stripTrailingSlash(path) {
+  return path.length > 1 && path.endsWith("/") ? path.replace(/\/+$/, "") : path;
+}
+
+/**
+ * Build the script arguments naming the instance to restart.
+ *
+ * The script has its own defaults (`~/.dsh`, or `~/.dsh-dev` for `dev`), and
+ * those defaults are wrong for any instance running on another home. The mode
+ * word is only kept where it still adds something: `dev` also selects the dev
+ * port, since the dev instance is identified by its home, not by a flag.
+ */
+function restartTargetArgs(dshHome) {
+  const home = stripTrailingSlash(dshHome);
+  const devHome = join(homedir(), ".dsh-dev");
+  if (home === devHome) return ["dev", "--profile-home", home];
+  return ["--profile-home", home];
+}
+
+function scheduleDetachedRestart(delayMs = FIXED_DELAY_MS) {
   const dshHome = currentDshHome();
-  const isDev = dshHome === join(homedir(), ".dsh-dev");
-  const modeArg = isDev ? " dev" : "";
+  const args = restartTargetArgs(dshHome)
+    .map((arg) => JSON.stringify(arg))
+    .join(" ");
   const helper = `#!/usr/bin/env bash
 # Detached restart helper written by @deepseek-ai/dsh-restart.
 # The outer DSH process may exit while this helper sleeps; once it is
 # reparented to init the sleep below still continues. The restart script is
 # invoked with DSH_RESTART_ALLOWED=1.
-sleep "$(awk "BEGIN { print ${Math.max(0, Number(delayMs) || 0)} / 1000 }")"
-exec "${SCRIPT}"${modeArg} >> "${SCRIPT}.schedule.log" 2>&1
+sleep ${Math.max(0, Number(delayMs) || 0) / 1000}
+exec ${JSON.stringify(SCRIPT)} ${args} >> ${JSON.stringify(join(dshHome, "dsh-restart.schedule.log"))} 2>&1
 `;
   const helperPath = join(dshHome, "dsh-restart-helper.sh");
   mkdirSync(dshHome, { recursive: true });
@@ -89,14 +107,23 @@ function failureNoticeSection() {
 }
 
 export function apply(ctx) {
-  // Optional enhancement: never let the notice break boot or command
-  // registration, hence its own guarded block. systemPrompt is optional —
-  // skip silently in runtimes that do not provide it.
-  try {
-    const systemPrompt = ctx.get("systemPrompt");
-    if (systemPrompt) systemPrompt.section(failureNoticeSection());
-  } catch {
-    // The notice is best-effort by design.
+  // The notice is optional — a runtime without a prompt registry still gets
+  // the commands and the tool. It must be registered through ctx.inject rather
+  // than read with ctx.get at apply time: row order carries no load semantics,
+  // so when the system-prompt row activates after this one, ctx.get returns
+  // undefined and the section would be dropped for the whole process.
+  if (typeof ctx.inject === "function") {
+    ctx.inject(["systemPrompt"], (scope) => {
+      const systemPrompt = scope.get ? scope.get("systemPrompt") : scope.systemPrompt;
+      if (systemPrompt) systemPrompt.section(failureNoticeSection());
+    });
+  } else {
+    try {
+      const systemPrompt = ctx.get ? ctx.get("systemPrompt") : undefined;
+      if (systemPrompt) systemPrompt.section(failureNoticeSection());
+    } catch {
+      // Test doubles and exotic runtimes: the notice is best-effort.
+    }
   }
 
   const restartHandler = async () => {

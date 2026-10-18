@@ -3,12 +3,22 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 
 // MUST be set before any handler runs. Scheduling is otherwise a real,
 // detached restart of whatever DSH instance the test process inherited —
 // running this suite unprotected actually restarted production once (each
 // handler call schedules a 3s detached `dsh-restart.sh`).
 process.env.DSH_RESTART_DRY_RUN = "1";
+
+// DRY_RUN suppresses the spawn but NOT the file write: every handler call
+// rewrites the helper script under DSH_HOME. Point DSH_HOME at a throwaway
+// directory so the suite can never overwrite a live instance's helper —
+// `npm test` does not isolate the environment on its own.
+const sandboxHome = mkdtempSync(join(tmpdir(), "dsh-restart-test-"));
+process.env.DSH_HOME = sandboxHome;
+process.on("exit", () => rmSync(sandboxHome, { recursive: true, force: true }));
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..");

@@ -25,7 +25,7 @@ dsh plugin --profile web add @moon16u/dsh-plugin-restart
 ```bash
 npm test
 ```
-测试套件设置 `DSH_RESTART_DRY_RUN=1`：调度只写 helper 文件、不真正拉起进程。不设此标志时，每次处理都会真实分离重启 `$DSH_HOME` 指向的 DSH 实例。
+测试套件设置 `DSH_RESTART_DRY_RUN=1`：调度只写 helper 文件、不真正拉起进程；同时把 `DSH_HOME` 指向临时目录，确保它写出的 helper 不会覆盖现网实例的那份。不设此标志时，每次处理都会真实分离重启 `$DSH_HOME` 指向的 DSH 实例。
 
 ## 许可
 [MIT](../../LICENSE)
