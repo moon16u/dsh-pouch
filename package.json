@@ -2,7 +2,7 @@
   "name": "dsh-pouch-workspace",
   "version": "0.0.0",
   "private": true,
-  "description": "Monorepo for four independent DeepSeek Harness (DSH) plugins. The workspace root is not a DSH bundle and is never published to npm.",
+  "description": "Monorepo for independent DeepSeek Harness (DSH) plugins. The workspace root is not a DSH bundle and is never published to npm.",
   "type": "module",
   "scripts": {
     "test": "pnpm -r test"
