@@ -1,6 +1,6 @@
 /**
  * Orchestrator: the console's core. It owns the fiber ledger
- * (`Map<serverName, { fiber, config, toolNames, error, ... }>`) and every
+ * (`Map<serverName, { fiber, config, error, ... }>`) and every
  * lifecycle operation on the official `@deepseek-ai/dsh-mcp-client`:
  *
  *   load      ctx.plugin(mcpClient, config)   — one fiber per server
@@ -14,10 +14,14 @@
  * all inherited from the official client.
  *
  * Concurrency: every mutating operation runs through a serialized promise
- * chain, because tool-ownership is observed by diffing the global tool
- * registry around each load (public names of tools whose raw names are too
- * long get hash-suffixed by the official client, so a plain prefix match is
- * not enough — the plan's §5.3 diff approach).
+ * chain. Tool ownership is a pure prefix match on the official naming
+ * contract (`mcp__<serverName>__<rawName>`): normalization replaces invalid
+ * characters and truncation only shortens the tail before appending the
+ * 12-hex identity hash, so the server prefix survives every lossy rename.
+ * Nothing is inferred by diffing the global registry around a load — a diff
+ * would also catch unrelated tools registered at the same moment (host
+ * plugin tools, other MCP servers' tools), which is exactly how a
+ * non-MCP tool once showed up inside an MCP server's card.
  *
  * Conflict pre-check (plan §5.2): before assembling a fiber, the serverName
  * is checked against (a) this ledger and (b) every LIVE mcp-client fiber in
@@ -159,8 +163,8 @@ export class Orchestrator {
 
   /**
    * Every live mcp-client serverName (this console's ledger plus external
-   * instances). Tool names are attributed by prefix first; the load-time
-   * diff only covers hash-suffixed names the prefix cannot see.
+   * instances). Attribution itself is prefix-only; this scan exists for the
+   * conflict pre-check and the external-server listing.
    */
   liveServerNames() {
     const names = new Set(this.ledger.keys());
@@ -179,38 +183,29 @@ export class Orchestrator {
   }
 
   /**
-   * Live tool names attributed to one server: prefix matches (`mcp__<name>__`)
-   * plus names captured by this server's load diff that no OTHER live
-   * server's prefix owns — the diff alone cannot distinguish tools that
-   * OTHER servers registered concurrently during the load window (which
-   * happens at boot, when profile-declared entries start beside us).
+   * Live tool names attributed to one server: the official naming contract is
+   * `mcp__<serverName>__<rawName>` and lossy normalization never touches the
+   * server prefix (invalid characters are replaced and truncation shortens
+   * only the raw-name tail before the 12-hex identity hash is appended), so a
+   * prefix match is exact and total. A load-time registry diff is deliberately
+   * NOT used: it cannot tell this server's tools from unrelated tools that
+   * registered while the fiber was starting (host plugin tools such as
+   * `sidebar_open`, other servers at boot), so it smuggles foreign tools into
+   * the card.
    */
   toolsOf(name, currentNames) {
-    const current = currentNames ?? this.toolNamesSnapshot();
-    const entry = this.ledger.get(name);
-    return this.attributeTools(name, current, entry ? entry.toolNames : new Set());
+    return this.attributeTools(name, currentNames ?? this.toolNamesSnapshot());
   }
 
   /**
-   * Attribute live tool names to one server from a registry snapshot plus a
-   * load-time diff set (prefix first, then unclaimed diff names). Shared by
-   * the snapshot path and the side-fiber probe, which owns no ledger entry.
+   * Prefix-only attribution from a registry snapshot. Shared by the snapshot
+   * path and the side-fiber probe, which owns no ledger entry.
    */
-  attributeTools(name, current, captured) {
+  attributeTools(name, current) {
     const prefix = `mcp__${name}__`;
-    const foreignPrefixes = [];
-    for (const other of this.liveServerNames()) {
-      if (other !== name) foreignPrefixes.push(`mcp__${other}__`);
-    }
     const names = [];
     for (const toolName of current) {
-      if (toolName.startsWith(prefix)) {
-        names.push(toolName);
-        continue;
-      }
-      if (!captured.has(toolName)) continue;
-      if (foreignPrefixes.some((foreign) => toolName.startsWith(foreign))) continue;
-      names.push(toolName);
+      if (toolName.startsWith(prefix)) names.push(toolName);
     }
     return names.sort();
   }
@@ -314,12 +309,12 @@ export class Orchestrator {
       if (raw.enabled === false) continue;
       const { config, error } = validateServerConfig(raw);
       if (error) {
-        this.ledger.set(name, { fiber: null, config: raw, toolNames: new Set(), error, pending: false, loadedAt: 0 });
+        this.ledger.set(name, { fiber: null, config: raw, error, pending: false, loadedAt: 0 });
         continue;
       }
       const conflict = this.precheck(name);
       if (conflict) {
-        this.ledger.set(name, { fiber: null, config, toolNames: new Set(), error: conflict, pending: false, loadedAt: 0 });
+        this.ledger.set(name, { fiber: null, config, error: conflict, pending: false, loadedAt: 0 });
         continue;
       }
       await this.loadOne(name, config);
@@ -509,7 +504,6 @@ export class Orchestrator {
         if (!this.mcpClient) this.mcpClient = await resolveMcpClient();
         // force failOnStartupError: the probe must hear about a failed handshake
         const probeConfig = { ...toClientConfig(config), failOnStartupError: true };
-        const before = this.toolNamesSnapshot();
         fiber = this.ctx.plugin(this.mcpClient, probeConfig);
         await new Promise((resolve, reject) => {
           timer = setTimeout(
@@ -518,9 +512,8 @@ export class Orchestrator {
           );
           Promise.resolve(fiber).then(resolve, reject);
         });
-        const after = this.toolNamesSnapshot();
-        const captured = new Set([...after].filter((toolName) => !before.has(toolName)));
-        const toolCount = this.attributeTools(name, after, captured).length;
+        // the tool count is prefix-only, so no registry diff is needed
+        const toolCount = this.attributeTools(name, this.toolNamesSnapshot()).length;
         return { ok: true, live: false, toolCount, latencyMs: Date.now() - started, error: null };
       } catch (probeError) {
         return {
@@ -628,7 +621,6 @@ export class Orchestrator {
     const entry = {
       fiber: null,
       config,
-      toolNames: new Set(),
       error: null,
       pending: true,
       loadedAt: Date.now(),
@@ -636,19 +628,15 @@ export class Orchestrator {
     this.ledger.set(name, entry);
     try {
       if (!this.mcpClient) this.mcpClient = await resolveMcpClient();
-      const before = this.toolNamesSnapshot();
       const fiber = this.ctx.plugin(this.mcpClient, toClientConfig(config));
       entry.fiber = fiber;
       await fiber;
       entry.pending = false;
       entry.loadedAt = Date.now();
       entry.error = null;
-      const after = this.toolNamesSnapshot();
-      entry.toolNames = new Set([...after].filter((toolName) => !before.has(toolName)));
     } catch (error) {
       entry.pending = false;
       entry.error = errorMessage(error);
-      entry.toolNames = new Set();
       if (entry.fiber && entry.fiber.state !== FiberState.DISPOSED) {
         try {
           await entry.fiber.dispose();
@@ -663,7 +651,6 @@ export class Orchestrator {
   /** Hot-swap an existing fiber's config (update/reconnect both land here). */
   async swapFiber(entry, config) {
     const fiber = entry.fiber;
-    const before = this.toolNamesSnapshot();
     entry.pending = true;
     entry.error = null;
     try {
@@ -678,12 +665,9 @@ export class Orchestrator {
       entry.config = config;
       entry.pending = false;
       entry.loadedAt = Date.now();
-      const after = this.toolNamesSnapshot();
-      entry.toolNames = new Set([...after].filter((toolName) => !before.has(toolName)));
     } catch (error) {
       entry.pending = false;
       entry.error = errorMessage(error);
-      entry.toolNames = new Set();
     }
   }
 

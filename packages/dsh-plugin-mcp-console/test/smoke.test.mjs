@@ -174,19 +174,25 @@ test("orchestrator precheck rejects bad, duplicate and external names", async ()
   rmSync(dir, { recursive: true, force: true });
 });
 
-test("toolsOf attributes prefix matches and drops concurrently-captured foreign tools", () => {
+test("toolsOf attributes prefix matches only and never touches the ledger tool list", () => {
+  // Attribution must be a pure function of the naming contract. A tool that
+  // is NOT `mcp__everything__*` never belongs to the server, no matter what
+  // registered it: another MCP server's tool, or a host plugin tool such as
+  // `sidebar_open` that landed in the same boot window. (The old load-time
+  // registry diff captured exactly those and showed the foreign tool as the
+  // server's 29th.)
   const registryEntries = [
     ["cb1", { name: "mcp-client", fibers: [{ config: { serverName: "firecrawl" } }] }],
   ];
+  const toolNames = [
+    "mcp__everything__echo",
+    "mcp__everything__some_extremely_long_tool_name_aaaaaaaaaaaaa",
+    "mcp__firecrawl__scrape",
+    "sidebar_open",
+  ];
   const fakeCtx = {
     registry: { entries: () => registryEntries[Symbol.iterator]() },
-    tools: {
-      schemas: () => [
-        { name: "mcp__everything__echo" },
-        { name: "mcp__everything__some_extremely_long_tool_name_aaaaaaaaaaaaa" },
-        { name: "mcp__firecrawl__scrape" },
-      ],
-    },
+    tools: { schemas: () => toolNames.map((name) => ({ name })) },
     plugin: () => {
       throw new Error("not in this test");
     },
@@ -196,19 +202,21 @@ test("toolsOf attributes prefix matches and drops concurrently-captured foreign 
     globalStore: new Store(join("/tmp", "mcp-console-unwritable", "dsh-mcp.json")),
     onChange: () => {},
   });
-  // the load diff captured a foreign tool too (boot-time concurrency race)
   orchestrator.ledger.set("everything", {
     fiber: null,
     config: {},
-    toolNames: new Set(["mcp__everything__some_extremely_long_tool_name_aaaaaaaaaaaaa", "mcp__firecrawl__scrape"]),
     error: null,
     pending: false,
     loadedAt: Date.now(),
   });
   const tools = orchestrator.toolsOf("everything");
-  // own prefix match kept, own hash-suffixed name kept (diff), foreign tool dropped
+  // own prefix matches kept (long, truncated names included), everything else dropped
   assert.deepEqual(tools, [
     "mcp__everything__echo",
     "mcp__everything__some_extremely_long_tool_name_aaaaaaaaaaaaa",
+  ]);
+  // an explicit prefix override is honoured and still filtered
+  assert.deepEqual(orchestrator.toolsOf("firecrawl", ["mcp__firecrawl__scrape", "sidebar_open"]), [
+    "mcp__firecrawl__scrape",
   ]);
 });

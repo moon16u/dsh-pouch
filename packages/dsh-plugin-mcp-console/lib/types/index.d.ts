@@ -43,7 +43,6 @@ export type ServerConfig = StdioServerConfig | HttpServerConfig;
 export interface LedgerEntry {
   fiber: Fiber | null;
   config: ServerConfig;
-  toolNames: Set<string>;
   error: string | null;
   pending: boolean;
   loadedAt: number;

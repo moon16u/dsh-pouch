@@ -96,7 +96,6 @@ test("probe of a live healthy fiber reports live status without a side fiber", a
     orchestrator.ledger.set("github", {
       fiber: fakeFiber({ state: ACTIVE, settle: Promise.resolve() }),
       config: {},
-      toolNames: new Set(),
       error: null,
       pending: false,
       loadedAt: Date.now(),
@@ -117,7 +116,6 @@ test("probe of a live-but-unhealthy fiber reports the failure honestly", async (
     orchestrator.ledger.set("github", {
       fiber: fakeFiber({ state: ACTIVE, settle: Promise.resolve() }),
       config: {},
-      toolNames: new Set(),
       error: null,
       pending: false,
       loadedAt: Date.now(),
@@ -134,8 +132,9 @@ test("probe of a live-but-unhealthy fiber reports the failure honestly", async (
 test("probe spawns one side fiber, forces failOnStartupError, counts tools, disposes it", async () => {
   const spawnedConfigs = [];
   const spawnedFibers = [];
-  // a live foreign server exists; the probe's own diff will capture one of
-  // its concurrently-registered tools and must drop it
+  // attribution is prefix-only: the probe must keep this server's tools
+  // (truncated names keep the prefix) and ignore whatever else registers
+  // during the same window
   const tools = ["mcp__github__echo"];
   const orchestrator = makeOrchestrator({
     servers: { github: { ...VALID_HTTP, failOnStartupError: false } },
@@ -149,10 +148,14 @@ test("probe spawns one side fiber, forces failOnStartupError, counts tools, disp
     orchestrator.ctx.plugin = (mod, config) => {
       assert.equal(mod.name, "fake-mcp-client");
       spawnedConfigs.push(config);
-      // the official client registers a hash-renamed long tool (no server
-      // prefix — that is why the diff capture exists) and a foreign server's
-      // tool lands in the same window
-      tools.push("mcp__a1b2c3d4e5f6g7h8", "mcp__other__scrape");
+      // a hash-suffixed long name that still carries this server's prefix,
+      // plus two tools that belong elsewhere: another MCP server and a host
+      // plugin tool (`sidebar_open`) registered in the same window
+      tools.push(
+        "mcp__github__a-very-long-mcp-tool-name-that-does-no_597d4a6e6db4",
+        "mcp__other__scrape",
+        "sidebar_open",
+      );
       const fiber = fakeFiber({ state: ACTIVE, settle: Promise.resolve(), config });
       spawnedFibers.push(fiber);
       return fiber;
@@ -163,7 +166,7 @@ test("probe spawns one side fiber, forces failOnStartupError, counts tools, disp
     assert.equal(spawnedConfigs[0].serverName, "github");
     assert.equal(result.ok, true);
     assert.equal(result.live, false);
-    // prefix match + hash-renamed diff capture; the foreign capture is dropped
+    // both own tools counted; the foreign MCP tool and `sidebar_open` are not
     assert.equal(result.toolCount, 2);
     assert.ok(typeof result.latencyMs === "number" && result.latencyMs >= 0);
     assert.equal(result.error, null);
