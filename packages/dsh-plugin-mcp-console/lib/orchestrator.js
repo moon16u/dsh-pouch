@@ -320,8 +320,14 @@ export class Orchestrator {
     return this.run(() => this.reconcileNow(retry));
   }
 
+  /**
+   * Converge the ledger onto the stores. Returns the names that were actually
+   * assembled or re-assembled during this pass (not every healthy server), so
+   * `refresh()` reports what it did instead of what it found.
+   */
   async reconcileNow(retry = false) {
     const stored = this.storedServers();
+    const reloaded = [];
     for (const name of [...this.ledger.keys()]) {
       if (!stored.has(name) || stored.get(name).enabled === false) await this.disposeOne(name);
     }
@@ -349,10 +355,12 @@ export class Orchestrator {
           this.ledger.set(name, { fiber: null, config, error: conflict, pending: false, loadedAt: 0 });
         } else if (entry) await this.swapFiber(entry, config);
         else await this.loadOne(name, config);
+        if (!this.ledger.get(name)?.error) reloaded.push(name);
       } else if (entry) entry.config = config;
     }
     this.rebuildDisabledToolSet();
     this.onChange();
+    return reloaded;
   }
 
   close() {
@@ -405,6 +413,12 @@ export class Orchestrator {
       const existing = this.storedServers().get(name);
       if (!existing) throw new ConsoleError("not_found", `unknown server "${name}"`);
       const merged = { ...existing, ...patch, name: patch?.name ?? name };
+      // An explicit null from the panel clears an optional advanced field
+      // (`reconnect`, `maxInstructionBytes`) that PATCH would otherwise merge
+      // over; validation treats an absent key as "official default".
+      for (const key of ["reconnect", "maxInstructionBytes"]) {
+        if (patch && patch[key] === null) delete merged[key];
+      }
       if (merged.name !== name) throw new ConsoleError("invalid", "renaming a server is not supported; remove and re-add");
       if (merged.scope === "project" && !this.projectStore) {
         throw new ConsoleError("invalid", "project scope is unavailable: no session workspace is attached");
@@ -600,9 +614,9 @@ export class Orchestrator {
   refresh() {
     return this.run(async () => {
       const ingest = await this.ingestFromProfile();
-      await this.reconcileNow(true);
+      const restarted = await this.reconcileNow(true);
       return {
-        restarted: [...this.ledger].filter(([, entry]) => !entry.error).map(([name]) => name),
+        restarted,
         failed: [...this.ledger].filter(([, entry]) => entry.error).map(([name, entry]) => ({ name, error: entry.error })),
         ingested: ingest.ingested,
       };
@@ -697,7 +711,14 @@ export class Orchestrator {
     return entry;
   }
 
-  /** Hot-swap an existing fiber's config (update/reconnect both land here). */
+  /**
+   * Hot-swap an existing fiber's config (update/reconnect both land here).
+   *
+   * The failure state is written onto the CURRENT ledger entry: `loadOne()`
+   * replaces the map entry with a fresh object, so the `entry` captured here
+   * is stale the moment the swap starts, and writing to it would update an
+   * object no caller ever reads again.
+   */
   async swapFiber(entry, config) {
     entry.pending = true;
     entry.config = config;
@@ -706,8 +727,21 @@ export class Orchestrator {
       const fresh = await this.loadOne(config.name, config);
       if (fresh.error) throw new Error(fresh.error);
     } catch (error) {
-      entry.error = errorMessage(error);
-      entry.pending = false;
+      // A disposal failure leaves the old entry in place (no loadOne ran);
+      // otherwise this is the new entry, which keeps its own error string.
+      const live = this.ledger.get(config.name);
+      if (live) {
+        live.pending = false;
+        if (!live.error) live.error = errorMessage(error);
+      } else {
+        this.ledger.set(config.name, {
+          fiber: null,
+          config,
+          error: errorMessage(error),
+          pending: false,
+          loadedAt: 0,
+        });
+      }
       // Retain a disposal failure rather than create an overlapping connection.
     }
   }

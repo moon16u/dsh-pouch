@@ -48,6 +48,10 @@ window.__ModuleLoader__.load({
       importPreviewAdded: "将新增 {n} 台",
       importConfirm: "确认导入",
       importResult: "已导入 {added} 台，跳过 {skipped} 台",
+      reconnect: "重连",
+      exportYaml: "导出 YAML",
+      exportDone: "已导出 {n} 项到 {path}",
+      exportEmpty: "没有可导出的服务器。",
       addTitle: "添加 MCP 服务器",
       editTitle: "编辑 MCP 服务器",
       formName: "服务名称",
@@ -76,7 +80,12 @@ window.__ModuleLoader__.load({
       scopeProjectNoWorkspaceHelp: "所有项目生效（当前处于全局设置，项目级专属配置需在具体项目会话中配置）",
       scopeProjectDisabledTip: "当前处于全局设置，无活跃项目工作区",
       formAdvanced: "高级选项",
-      required: "必填",
+      formMaxInstruction: "服务器指令字节上限",
+      formMaxInstructionPlaceholder: "留空使用官方默认值 (32768)",
+      formMaxInstructionInvalid: "指令字节上限必须是正整数",
+      formReconnect: "重连策略",
+      formReconnectPlaceholder: "每行一个 key=value，例如:\nmaxAttempts=5\ninitialDelayMs=1000",
+      formReconnectHelp: "可选 enabled / initialDelayMs / maxDelayMs / maxAttempts；留空使用官方默认值",
       saveConfig: "保存配置",
       cancel: "取消",
       loadingData: "加载中…",
@@ -137,6 +146,10 @@ window.__ModuleLoader__.load({
       importPreviewAdded: "{n} to add",
       importConfirm: "Import",
       importResult: "Imported {added}, skipped {skipped}",
+      reconnect: "Reconnect",
+      exportYaml: "Export YAML",
+      exportDone: "Exported {n} entries to {path}",
+      exportEmpty: "No servers to export.",
       addTitle: "Add MCP server",
       editTitle: "Edit MCP server",
       formName: "Server name",
@@ -165,7 +178,12 @@ window.__ModuleLoader__.load({
       scopeProjectNoWorkspaceHelp: "Applies to all projects (currently in global settings; configure project-scoped MCP within a project session)",
       scopeProjectDisabledTip: "Currently in global settings, no active workspace",
       formAdvanced: "Advanced",
-      required: "required",
+      formMaxInstruction: "Server instruction byte cap",
+      formMaxInstructionPlaceholder: "Leave empty for the official default (32768)",
+      formMaxInstructionInvalid: "The instruction byte cap must be a positive integer",
+      formReconnect: "Reconnect policy",
+      formReconnectPlaceholder: "One key=value per line, e.g.:\nmaxAttempts=5\ninitialDelayMs=1000",
+      formReconnectHelp: "Optional enabled / initialDelayMs / maxDelayMs / maxAttempts; empty uses the official defaults",
       saveConfig: "Save config",
       cancel: "Cancel",
       loadingData: "Loading…",
@@ -421,6 +439,57 @@ window.__ModuleLoader__.load({
       }).join("\n");
     }
 
+    /**
+     * The disabledTools list after clicking one tool pill.
+     *
+     * Based on the STORED list, never on the live tool list: a server that is
+     * currently down exposes no tools, so rebuilding from the live list would
+     * silently erase every per-tool restriction on the next unrelated toggle.
+     */
+    function mcpNextDisabledTools(server, tool) {
+      var stored = Array.isArray(server && server.disabledTools) ? server.disabledTools : [];
+      var rest = stored.filter(function (name) { return name !== tool.name; });
+      return tool.enabled ? rest.concat([tool.name]) : rest;
+    }
+
+    /**
+     * `reconnect` as the advanced box shows it: one `key=value` per line, the
+     * four options the official client accepts. An absent policy stays empty
+     * (the official defaults apply).
+     */
+    var MCP_RECONNECT_KEYS = ["enabled", "initialDelayMs", "maxDelayMs", "maxAttempts"];
+
+    function mcpFormatReconnect(policy) {
+      if (!policy || typeof policy !== "object") return "";
+      return MCP_RECONNECT_KEYS
+        .filter(function (key) { return policy[key] !== undefined; })
+        .map(function (key) { return key + "=" + String(policy[key]); })
+        .join("\n");
+    }
+
+    /** Parse the reconnect box; throws a user-facing message on bad input. */
+    function mcpParseReconnect(text) {
+      var out = {};
+      String(text ?? "").split(/\r?\n/).forEach(function (line) {
+        var trimmed = line.trim();
+        if (trimmed.length === 0) return;
+        var at = trimmed.indexOf("=");
+        if (at <= 0) throw new Error("reconnect: expected key=value, got \"" + trimmed + "\"");
+        var key = trimmed.slice(0, at).trim();
+        var raw = trimmed.slice(at + 1).trim();
+        if (MCP_RECONNECT_KEYS.indexOf(key) < 0) throw new Error("reconnect: unknown option \"" + key + "\"");
+        if (key === "enabled") {
+          if (raw !== "true" && raw !== "false") throw new Error("reconnect.enabled must be true or false");
+          out.enabled = raw === "true";
+        } else {
+          var n = Number(raw);
+          if (!Number.isSafeInteger(n) || n < 1) throw new Error("reconnect." + key + " must be a positive integer");
+          out[key] = n;
+        }
+      });
+      return Object.keys(out).length > 0 ? out : undefined;
+    }
+
     /** The per-server master toggle (mcp-manager-gui-spec §3.3-4). */
     function McpSwitch(props) {
       var t = props.t;
@@ -515,6 +584,11 @@ window.__ModuleLoader__.load({
               title: t("test"), "aria-label": t("test"),
               onClick: function () { props.onProbe(server); },
             }, McpH(IconLink, { size: 14 })),
+            readOnly || !enabled ? null : McpH("button", {
+              type: "button", className: "mcp-mgr-iconbtn", disabled: busy,
+              title: t("reconnect"), "aria-label": t("reconnect"),
+              onClick: function () { props.onReconnect(server); },
+            }, McpH(IconRefresh, { size: 14 })),
             readOnly ? null : McpH("button", {
               type: "button", className: "mcp-mgr-del", disabled: busy,
               title: t("remove"), "aria-label": t("remove"),
@@ -582,6 +656,10 @@ window.__ModuleLoader__.load({
       var fail = failState[0], setFail = failState[1];
       var scopeState = useState(initial.scope === "project" ? "project" : "global");
       var scope = scopeState[0], setScope = scopeState[1];
+      var maxInstructionState = useState(initial.maxInstructionBytes === undefined ? "" : String(initial.maxInstructionBytes));
+      var maxInstruction = maxInstructionState[0], setMaxInstruction = maxInstructionState[1];
+      var reconnectState = useState(mcpFormatReconnect(initial.reconnect));
+      var reconnect = reconnectState[0], setReconnect = reconnectState[1];
       var advancedState = useState(false);
       var advancedOpen = advancedState[0], setAdvancedOpen = advancedState[1];
       var errorState = useState(null);
@@ -599,6 +677,17 @@ window.__ModuleLoader__.load({
           failOnStartupError: fail,
           disabledTools: Array.isArray(initial.disabledTools) ? initial.disabledTools : [],
         };
+        // Advanced fields are optional. An empty box means "use the official
+        // default": omitting the key does that on add, but PATCH merges over
+        // the stored config, so an edit must send null to clear a set value.
+        var policy = mcpParseReconnect(reconnect);
+        if (policy) config.reconnect = policy;
+        else if (isEdit) config.reconnect = null;
+        var cap = Number(maxInstruction);
+        if (maxInstruction.trim().length > 0) {
+          if (!Number.isSafeInteger(cap) || cap < 1) throw new Error(t("formMaxInstructionInvalid"));
+          config.maxInstructionBytes = cap;
+        } else if (isEdit) config.maxInstructionBytes = null;
         if (transport === "stdio") {
           config.command = command.trim();
           config.args = args.split(/\r?\n/).map(function (line) { return line.trim(); }).filter(function (line) { return line.length > 0; });
@@ -612,8 +701,15 @@ window.__ModuleLoader__.load({
 
       function submit() {
         setError(null);
+        var config;
+        try {
+          config = collect();
+        } catch (failure) {
+          setError(failure instanceof Error ? failure.message : String(failure));
+          return;
+        }
         setBusy(true);
-        Promise.resolve(props.onSubmit(collect())).then(function () {
+        Promise.resolve(props.onSubmit(config)).then(function () {
           setBusy(false);
         }, function (failure) {
           setError(failure instanceof Error ? failure.message : String(failure));
@@ -731,7 +827,22 @@ window.__ModuleLoader__.load({
                   type: "checkbox", checked: fail, "aria-label": t("formFail"),
                   onChange: function (event) { setFail(event.target.checked); },
                 }),
-                McpH("span", null, t("formFail"))))
+                McpH("span", null, t("formFail"))),
+              fieldRow("max-instruction", t("formMaxInstruction"), false,
+                McpH("input", {
+                  className: "mcp-in", type: "number", min: "1", value: maxInstruction,
+                  "aria-label": t("formMaxInstruction"),
+                  placeholder: t("formMaxInstructionPlaceholder"),
+                  onChange: function (event) { setMaxInstruction(event.target.value); },
+                })),
+              fieldRow("reconnect", t("formReconnect"), false,
+                McpH("textarea", {
+                  className: "mcp-in mcp-in-area mcp-in-mono", value: reconnect,
+                  "aria-label": t("formReconnect"), rows: 4,
+                  placeholder: t("formReconnectPlaceholder"),
+                  onChange: function (event) { setReconnect(event.target.value); },
+                }),
+                t("formReconnectHelp")))
           : null);
 
       return McpH(React.Fragment, null,
@@ -898,6 +1009,12 @@ window.__ModuleLoader__.load({
       var error = errorState[0], setError = errorState[1];
       var confirmState = useState(null);
       var confirmName = confirmState[0], setConfirm = confirmState[1];
+      // Import outcome line: added / skipped counts plus every reason, kept
+      // even on partial success so silently dropped entries stay visible.
+      var importNoteState = useState(null);
+      var importNote = importNoteState[0], setImportNote = importNoteState[1];
+      var exportNoteState = useState(null);
+      var exportNote = exportNoteState[0], setExportNote = exportNoteState[1];
       var expandedState = useState({});
       var expanded = expandedState[0], setExpanded = expandedState[1];
       var refreshingState = useState(false);
@@ -906,6 +1023,10 @@ window.__ModuleLoader__.load({
       var probes = probeState[0], setProbes = probeState[1]; // name -> {busy}|result
       var offlineState = useState(false);
       var offline = offlineState[0], setOffline = offlineState[1];
+      // Bumped to rebuild the SSE stream after a transport error (the source
+      // was closed, and the effect only re-runs when one of its inputs changes).
+      var streamEpochState = useState(0);
+      var streamEpoch = streamEpochState[0], setStreamEpoch = streamEpochState[1];
 
       /** A 404 on our own prefix means the master switch took the routes down. */
       function receiveFailure(failure) {
@@ -940,16 +1061,44 @@ window.__ModuleLoader__.load({
       var streamReady = snapshot !== null;
       useEffect(function () {
         if (!streamReady || offline) return undefined;
+        var retry = null;
         var source = new EventSource("/api/dsh-mcp-console" + mcpWithSession("/events"));
         source.addEventListener("status_changed", function (event) {
           try {
             setSnapshot(JSON.parse(event.data));
           } catch {}
         });
+        // `bye` is the console tearing its routes down on purpose (the master
+        // switch), so it is the only frame that means "switched off".
         source.addEventListener("bye", function () { source.close(); setOffline(true); });
-        source.onerror = function () { source.close(); setOffline(true); };
-        return function () { source.close(); };
-      }, [streamReady, offline]);
+        // A transport error says nothing about WHY: EventSource reports the
+        // same event for a network blip and for a non-200. Verify with a real
+        // request (a 404 there flips `offline`), and reopen the stream only
+        // when the console answered.
+        source.onerror = function () {
+          source.close();
+          retry = setTimeout(function () {
+            retry = null;
+            mcpApi("/servers").then(function (body) {
+              setSnapshot(body);
+              setStreamEpoch(function (n) { return n + 1; });
+            }, receiveFailure);
+          }, 2000);
+        };
+        return function () {
+          if (retry) clearTimeout(retry);
+          source.close();
+        };
+      }, [streamReady, offline, streamEpoch]);
+
+      // The master switch lives on this same page: once it is turned back on the
+      // routes return, so poll while offline instead of stranding the section on
+      // the switched-off notice until the user reloads the whole page.
+      useEffect(function () {
+        if (!offline) return undefined;
+        var timer = setInterval(function () { void load(); }, 4000);
+        return function () { clearInterval(timer); };
+      }, [offline]);
 
       useEffect(function () {
         function onKey(event) {
@@ -995,8 +1144,7 @@ window.__ModuleLoader__.load({
       }
 
       function toggleTool(server, tool) {
-        var disabled = server.tools.filter(function (item) { return !item.enabled; }).map(function (item) { return item.name; });
-        var next = tool.enabled ? disabled.concat([tool.name]) : disabled.filter(function (name) { return name !== tool.name; });
+        var next = mcpNextDisabledTools(server, tool);
         return withBusy(server.name, function () {
           return mcpApi("/servers/" + encodeURIComponent(server.name), {
             method: "PATCH",
@@ -1036,6 +1184,24 @@ window.__ModuleLoader__.load({
               return next;
             });
           });
+      }
+
+      function reconnectServer(server) {
+        return withBusy(server.name, function () {
+          return mcpApi("/servers/" + encodeURIComponent(server.name) + "/reconnect", { method: "POST" });
+        });
+      }
+
+      function exportYaml() {
+        return withBusy(null, function () {
+          return mcpApi("/export-yaml", { method: "POST" }).then(function (result) {
+            var names = result && Array.isArray(result.exported) ? result.exported : [];
+            setExportNote(names.length === 0
+              ? t("exportEmpty")
+              : mcpFill(t("exportDone"), { n: names.length, path: result.filePath }));
+            return load();
+          });
+        });
       }
 
       function confirmRemove() {
@@ -1093,6 +1259,7 @@ window.__ModuleLoader__.load({
           onToggleTool: toggleTool,
           onRemove: removeServer,
           onProbe: probeServer,
+          onReconnect: reconnectServer,
           probe: probes[server.name],
           onEdit: function (target) { setEditing(target); setMode("edit"); },
         }));
@@ -1100,6 +1267,11 @@ window.__ModuleLoader__.load({
 
       var notes = [];
       if (error) notes.push(McpH("p", { className: "mcp-err", key: "api-error" }, t("apiError") + ": " + error));
+      if (importNote) {
+        notes.push(McpH("p", { className: "mcp-mgr-warn", key: "import-summary" }, importNote.summary));
+        notes.push(McpH("p", { className: "mcp-mgr-note", key: "import-reasons" }, importNote.reasons.join("; ")));
+      }
+      if (exportNote) notes.push(McpH("p", { className: "mcp-mgr-note", key: "export-note" }, exportNote));
       (snapshot && snapshot.storeErrors ? snapshot.storeErrors : []).forEach(function (message, index) {
         notes.push(McpH("p", { className: "mcp-mgr-warn", key: "store-" + index }, t("storeError") + ": " + message));
       });
@@ -1138,11 +1310,18 @@ window.__ModuleLoader__.load({
               onCancel: function () { setMode(null); },
               onDone: function (result) {
                 setMode(null);
-                if (result && result.skipped && result.skipped.length > 0 && result.added.length === 0) {
-                  setError(result.skipped.map(function (item) { return item.name + ": " + item.reason; }).join("; "));
-                } else {
-                  setError(null);
-                }
+                var added = result && Array.isArray(result.added) ? result.added : [];
+                var skipped = result && Array.isArray(result.skipped) ? result.skipped : [];
+                var parseErrors = result && Array.isArray(result.parseErrors) ? result.parseErrors : [];
+                var reasons = skipped
+                  .map(function (item) { return item.name + ": " + item.reason; })
+                  .concat(parseErrors);
+                setImportNote(reasons.length > 0 ? {
+                  summary: mcpFill(t("importResult"), { added: added.length, skipped: skipped.length }),
+                  reasons: reasons,
+                } : null);
+                if (added.length === 0 && reasons.length > 0) setError(reasons.join("; "));
+                else setError(null);
               },
             })));
       } else if (confirmName !== null) {
@@ -1198,7 +1377,11 @@ window.__ModuleLoader__.load({
           McpH("button", {
             type: "button", className: "mcp-mgr-btn", disabled: topDisabled,
             onClick: function () { setMode("import"); },
-          }, t("importAction"))),
+          }, t("importAction")),
+          McpH("button", {
+            type: "button", className: "mcp-mgr-btn", disabled: topDisabled,
+            onClick: exportYaml,
+          }, t("exportYaml"))),
         McpH(McpPluginCard, { t: t, scope: scope, hideHeader: true }),
         snapshot
           ? McpH("div", { className: "mcp-mgr-list" }, listChildren)
@@ -1330,6 +1513,12 @@ window.__ModuleLoader__.load({
      */
     function McpPluginCard(props) {
       var t = props.t;
+      // Plugins-page contract (`plugins.item`): `view: "summary"` is the card's
+      // one-liner, `view: "page"` is the body of the plugin's own page. The page
+      // already renders the card frame, title and chevron, so returning our own
+      // card here nests a second one inside the description line.
+      if (props.view === "summary") return t("pluginCardDesc");
+      if (props.view === "page") return McpH(McpPluginCardFields, { t: t, scope: props.scope });
       if (props.hideHeader === true) {
         return McpH("div", {
           className: "mcp-plugin-card mcp-plugin-card-flat",
@@ -1408,6 +1597,23 @@ window.__ModuleLoader__.load({
         });
       }
 
+      /**
+       * The session the main view is showing right now. `uiSession.adapter.current`
+       * is the retained main-view binding; scanning `sessions.list.byId` only sees
+       * which sessions are *retained*, so with several open tabs it answers with an
+       * arbitrary one and a project-scope write lands in a different workspace.
+       */
+      function mcpFocusedSession() {
+        try {
+          var uiSession = typeof ctx.get === "function" ? ctx.get("uiSession") : undefined;
+          var current = uiSession && uiSession.adapter ? uiSession.adapter.current : undefined;
+          var key = current && typeof current.getSnapshot === "function" ? current.getSnapshot().key : undefined;
+          return typeof key === "string" ? key : "";
+        } catch {
+          return "";
+        }
+      }
+
       // The session id routes the MCP API to the right project store. Without
       // this service the console stays global-only and says so through
       // hasProjectWorkspace=false rather than guessing a workspace.
@@ -1415,12 +1621,19 @@ window.__ModuleLoader__.load({
         ctx.inject(["sessions"], function (scope) {
           var sessions = scope.sessions;
           globalThis.__dshMcpConsoleSession = function () {
+            var focused = mcpFocusedSession();
+            if (focused) return focused;
+            // Fallback for hosts without `uiSession`: the single retained
+            // main-view session, if exactly one exists. Ambiguity answers ""
+            // (global scope) instead of guessing another workspace.
             try {
               var list = sessions && sessions.list && sessions.list.getSnapshot();
               if (!list) return "";
               var byId = list.byId || {};
-              var id = Object.keys(byId).find(function (key) { return ((byId[key].retainedBy || {}).mainView || 0) > 0; });
-              return id || "";
+              var retained = Object.keys(byId).filter(function (key) {
+                return ((byId[key].retainedBy || {}).mainView || 0) > 0;
+              });
+              return retained.length === 1 ? retained[0] : "";
             } catch { return ""; }
           };
         });
@@ -1434,6 +1647,7 @@ window.__ModuleLoader__.load({
     exports.mcpConsoleApply = mcpConsoleApply;
     exports.mcpConsoleOffline = mcpConsoleOffline;
     exports.mcpDictionaries = { zh: mcpZh, en: mcpEn };
+    exports.mcpNextDisabledTools = mcpNextDisabledTools;
     exports.mcpInject = mcpInject;
 
     // The bundle's own entry identity: cordis resolves a client module by its

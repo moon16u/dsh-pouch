@@ -8,6 +8,7 @@ import { parseDocument } from "yaml";
 import { ingestProfileMcpEntries, exportStoreToProfileYaml } from "../lib/yamlMigrator.js";
 import { Store } from "../lib/store.js";
 import { Orchestrator, mergeMasked } from "../lib/orchestrator.js";
+import { ConsoleAggregate } from "../lib/aggregate.js";
 import { registerRoutes } from "../lib/routes.js";
 import { Context } from "@deepseek-ai/cordis";
 
@@ -149,7 +150,6 @@ test("SSE close ends responses and no-op route after dispose", async () => {
   let ended = 0;
   const routes = registerRoutes({ webServer: { register({ handler: h }) { handler = h; return () => {}; } } }, {
     orchestrator: orchestrator("sse"),
-    uiStore: new Store("/tmp/_tmp_mcp_regression-ui.json"),
   });
   const req = new EventEmitter();
   Object.assign(req, { url: "/api/dsh-mcp-console/events?sessionId=x", method: "GET", socket: { remoteAddress: "127.0.0.1" }, headers: { host: "localhost:3080" } });
@@ -165,7 +165,7 @@ test("project requests route by an explicit session callback", async () => {
   const routes = registerRoutes({
     webServer: { register({ handler: h }) { handler = h; return () => {}; } },
     orchestratorForSession: id => id === "p" ? project : global,
-  }, { orchestrator: global, uiStore: new Store("/tmp/_tmp_mcp_regression-ui2.json") });
+  }, { orchestrator: global });
   const req = new EventEmitter();
   Object.assign(req, { url: "/api/dsh-mcp-console/health?sessionId=p", method: "GET", socket: { remoteAddress: "127.0.0.1" }, headers: { host: "localhost:3080" } });
   let body;
@@ -239,5 +239,169 @@ test("real Cordis refresh recreates a disposed fiber", async () => {
   assert.equal(one.ledger.get("demo").fiber.state, 2);
   await one.close();
   await real.fiber.dispose();
+  recover(root);
+});
+
+test("refresh reports what it restarted, not every healthy server", async () => {
+  const one = orchestrator("refresh-semantics");
+  // one healthy server and one that needs a reload
+  one.storedServers = () => new Map([
+    ["healthy-a", { name: "healthy-a", enabled: true, transport: "stdio", command: "node" }],
+    ["broken", { name: "broken", enabled: true, transport: "stdio", command: "node" }],
+  ]);
+  one.ledger.set("healthy-a", { fiber: { state: 2 }, config: {}, error: null, pending: false, loadedAt: Date.now() });
+  one.ledger.set("broken", { fiber: null, config: {}, error: "boom", pending: false, loadedAt: 0 });
+  one.loadOne = async (name, config) => {
+    const entry = { fiber: { state: 2 }, config, error: null, pending: false, loadedAt: Date.now() };
+    one.ledger.set(name, entry);
+    return entry;
+  };
+  const result = await one.refresh();
+  assert.deepEqual(result.restarted, ["broken"], "only the reloaded server is reported");
+  recover(one.__root);
+});
+
+test("a failed swap leaves the error on the live ledger entry", async () => {
+  const one = orchestrator("swap-failure");
+  one.mcpClient = { name: "swap-probe" };
+  one.storedServers = () => new Map([
+    ["demo", { name: "demo", enabled: true, transport: "stdio", command: "node" }],
+  ]);
+  const stale = { fiber: { state: 2, dispose: async () => {} }, config: {}, error: null, pending: false, loadedAt: Date.now() };
+  one.ledger.set("demo", stale);
+  // loadOne replaces the map entry and reports the failure there
+  one.loadOne = async (name, config) => {
+    const fresh = { fiber: null, config, error: "startup exploded", pending: false, loadedAt: 0 };
+    one.ledger.set(name, fresh);
+    return fresh;
+  };
+  await assert.rejects(() => one.reconnect("demo"), /startup exploded/);
+  const live = one.ledger.get("demo");
+  assert.equal(live.error, "startup exploded");
+  assert.equal(live.pending, false, "the live entry must not stay stuck pending");
+  assert.equal(stale.pending, true, "the replaced object is the stale one");
+  recover(one.__root);
+});
+
+test("PUT /config is refused and persists nothing", async () => {
+  let handler;
+  const routes = registerRoutes({ webServer: { register({ handler: h }) { handler = h; return () => {}; } } }, {
+    orchestrator: orchestrator("cfg"),
+  });
+  const body = JSON.stringify({ ui: { position: "bottom-right" }, config: { enabled: false } });
+  const req = new EventEmitter();
+  Object.assign(req, {
+    url: "/api/dsh-mcp-console/config",
+    method: "PUT",
+    socket: { remoteAddress: "127.0.0.1" },
+    headers: { host: "localhost:3080", "content-type": "application/json" },
+  });
+  let status;
+  handler(req, { writeHead(code) { status = code; }, end() {} });
+  process.nextTick(() => { req.emit("data", Buffer.from(body)); req.emit("end"); });
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  // The UI-placement section has no reader and is gone; switches are written
+  // through the official settings form, so nothing here may persist.
+  assert.equal(status, 405);
+  routes.dispose();
+});
+
+test("GET /config answers the resolved switches and stays loopback-only", async () => {
+  let handler;
+  const routes = registerRoutes({ webServer: { register({ handler: h }) { handler = h; return () => {}; } } }, {
+    orchestrator: orchestrator("cfg-read"),
+    getPluginConfig: () => ({ enabled: true, announceToAgent: false }),
+  });
+  const call = async (headers) => {
+    const req = new EventEmitter();
+    Object.assign(req, { url: "/api/dsh-mcp-console/config", method: "GET", socket: { remoteAddress: "127.0.0.1" }, headers });
+    let status;
+    let payload;
+    handler(req, { writeHead(code) { status = code; }, end(value) { payload = value; } });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    return { status, payload };
+  };
+  const local = await call({ host: "localhost:3080" });
+  assert.equal(local.status, 200);
+  assert.deepEqual(JSON.parse(local.payload).config, { enabled: true, announceToAgent: false });
+  // no route is exempt from the fence anymore
+  const lan = await call({ host: "attacker.example:3080" });
+  assert.equal(lan.status, 403);
+  routes.dispose();
+});
+
+test("an oversized body answers 400 instead of resetting the connection", async () => {
+  let handler;
+  const routes = registerRoutes({ webServer: { register({ handler: h }) { handler = h; return () => {}; } } }, {
+    orchestrator: orchestrator("oversize"),
+  });
+  const req = new EventEmitter();
+  req.resume = () => {};
+  Object.assign(req, {
+    url: "/api/dsh-mcp-console/import",
+    method: "POST",
+    socket: { remoteAddress: "127.0.0.1" },
+    headers: { host: "localhost:3080" },
+  });
+  let status;
+  let payload;
+  handler(req, { writeHead(code) { status = code; }, end(value) { payload = value; } });
+  process.nextTick(() => {
+    req.emit("data", Buffer.alloc(1024 * 1024 + 1, 0x61));
+    req.emit("end");
+  });
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(status, 400);
+  assert.match(JSON.parse(payload).error.message, /exceeds/);
+  routes.dispose();
+});
+
+test("a project-scope add without a workspace is a 400, not a 500", async () => {
+  let handler;
+  const routes = registerRoutes({ webServer: { register({ handler: h }) { handler = h; return () => {}; } } }, {
+    orchestrator: orchestrator("project-refusal"),
+    resolveOrchestrator: () => new ConsoleAggregate(orchestrator("agg-global"), null),
+  });
+  const req = new EventEmitter();
+  Object.assign(req, {
+    url: "/api/dsh-mcp-console/servers",
+    method: "POST",
+    socket: { remoteAddress: "127.0.0.1" },
+    headers: { host: "localhost:3080" },
+  });
+  let status;
+  handler(req, { writeHead(code) { status = code; }, end() {} });
+  process.nextTick(() => {
+    req.emit("data", Buffer.from(JSON.stringify({ name: "demo", transport: "stdio", command: "node", scope: "project" })));
+    req.emit("end");
+  });
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(status, 400);
+  routes.dispose();
+});
+
+test("PATCH null clears an optional advanced field, omitting it keeps it", async () => {
+  const root = mkdtempSync("/tmp/_tmp_mcp_regression-null-");
+  const store = new Store(join(root, "store.json"));
+  const one = new Orchestrator(fakeContext(), { globalStore: store, ingestProfile: false, scopeKey: "null-clear" });
+  store.mutate((servers) => {
+    servers.demo = {
+      enabled: false,
+      transport: "stdio",
+      command: "node",
+      reconnect: { maxAttempts: 3 },
+      maxInstructionBytes: 4096,
+    };
+  });
+  await one.update("demo", { reconnect: null, maxInstructionBytes: null });
+  const stored = store.read().servers.demo;
+  assert.equal(stored.reconnect, undefined, "null clears the reconnect policy");
+  assert.equal(stored.maxInstructionBytes, undefined, "null clears the byte cap");
+  // a patch that does not mention them leaves the values untouched
+  store.mutate((servers) => {
+    servers.demo.reconnect = { maxAttempts: 2 };
+  });
+  await one.update("demo", { toolCallTimeoutMs: 9000 });
+  assert.deepEqual(store.read().servers.demo.reconnect, { maxAttempts: 2 });
   recover(root);
 });

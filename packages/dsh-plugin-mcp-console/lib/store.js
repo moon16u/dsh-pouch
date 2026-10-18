@@ -18,9 +18,6 @@ import { randomBytes } from "node:crypto";
 /** Current document schema version. */
 export const STORE_VERSION = 1;
 
-/** serverName contract, mirrored from the official mcp-client. */
-export const SERVER_NAME_PATTERN = /^[A-Za-z0-9_-]{1,32}$/;
-
 /** Global-scope store path: `$DSH_HOME/dsh-mcp.json` (defaults to ~/.dsh). */
 export function globalStorePath(dshHome) {
   const root = dshHome ?? process.env.DSH_HOME ?? join(homedir(), ".dsh");
@@ -114,23 +111,6 @@ export class Store {
     if (result === false) return result;
     this._persist({ ...doc, servers });
     return result;
-  }
-
-  /** Persist only the UI config section, keeping servers untouched. */
-  writeUi(ui) {
-    if (!isPlainObject(ui)) throw new Error("ui config must be an object");
-    const doc = this.read();
-    this._persist({ ...doc, ui });
-    return ui;
-  }
-
-  /** Persist only the plugin master config section, keeping servers untouched. */
-  writeConfig(config) {
-    if (!isPlainObject(config)) throw new Error("config must be an object");
-    const doc = this.read();
-    const updated = { ...(doc.config || {}), ...config };
-    this._persist({ ...doc, config: updated });
-    return updated;
   }
 
   /** Atomically write the document (temp file + rename, no backups). */

@@ -128,7 +128,6 @@ export declare class Store {
   lastError: string | null;
   read(): { version: number; servers: Record<string, Partial<ServerConfig>>; ui?: Record<string, unknown> };
   mutate(mutate: (servers: Record<string, Partial<ServerConfig>>) => unknown): unknown;
-  writeUi(ui: Record<string, unknown>): Record<string, unknown>;
 }
 
 /** One tool as the panel sees it (mcp-manager-gui-spec §4 McpTool). */

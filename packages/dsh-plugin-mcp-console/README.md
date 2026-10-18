@@ -25,13 +25,13 @@ Then open DSH Web → bottom-left Settings → **"MCP servers"**.
 
 | Capability | Description |
 |---|---|
-| Server management | Add (stdio / streamable-http forms), edit, delete, enable/disable, reconnect; config changes take effect immediately, no DSH restart |
+| Server management | Add (stdio / streamable-http forms), edit, delete, enable/disable, per-server reconnect; config changes take effect immediately, no DSH restart. The edit form's Advanced section exposes the official `reconnect` policy and `maxInstructionBytes` |
 | Connection test | One-click "Test connection" per server: a throwaway official-client fiber (with `failOnStartupError` forced on) performs a real handshake and reports tool count + latency; for a running server it honestly reports the live status instead (the official client's serverName namespace cannot be bypassed) |
 | Per-tool switches | Expand a server card and click tool pills to toggle individual tools; disabled tools are denied at execution time by a guard |
 | Live status | running / connecting / starting / disabled / failed grading; SSE push updates, tool counts in real time |
 | JSON import | Paste Claude / Cursor style `mcpServers` JSON, preview, import; existing names skipped and reported |
 | Auto-ingest | MCP entries written into `cordis.patch.yml` by external agents/scripts are migrated into dynamic management on boot and on "Sync config & refresh status". Entries are read and located by YAML semantics, so inline `args`/`env`, `reconnect`, comments and quoting survive; only entries that persisted and match the store are removed, everything else stays with a reported reason |
-| YAML export | `POST /api/dsh-mcp-console/export-yaml` restores dynamic config as standard `cordis.patch.yml` entries (uninstall/backup reversibility) |
+| YAML export | The "Export YAML" header action (`POST /api/dsh-mcp-console/export-yaml`) restores dynamic config as standard `cordis.patch.yml` entries (uninstall/backup reversibility) |
 | Model awareness | A `ctx.systemPrompt.section` announcement tells every agent that MCP management lives in the settings page, not in hand-edited config files (own inject scope; dormant on hosts without the service) |
 | Settings integration | `enabled` / `announceToAgent` master switches as `.volatile()` fields of the schema-discovered `export const Config` (rc.2 SettingsForms): editable from the settings GUI and hot-updated in place, no DSH restart — `enabled` tears the whole surface down (routes + MCP connections + announcement; stores preserved), `announceToAgent` toggles only the announcement; hosts without the service fall back to entry defaults |
 | Settings-GUI card | The "MCP console" card on Settings → Plugins (`plugins.item`, key `ui-mcp-console`): collapsible and shaped like the official cards (same `--dsw-alias-*` tokens and metrics), switches write immediately, and a changed field carries a "Customized" badge with its own reset. Card and switches bind through the host's `configForms` service, so a host without it simply hides the card while the MCP servers page keeps working |
@@ -49,11 +49,11 @@ Then open DSH Web → bottom-left Settings → **"MCP servers"**.
 
 ## HTTP API (loopback-only, prefix `/api/dsh-mcp-console/`)
 
-`GET /health` · `GET/POST /servers` · `PATCH/DELETE /servers/:name` · `POST /servers/:name/enable|disable|reconnect|probe` · `POST /refresh` (ingest YAML + retry failed) · `POST /import` · `POST /export-yaml` · `GET /events` (SSE) · `GET/PUT /config` (UI placement only; plugin switches go through the official settings form)
+`GET /health` · `GET/POST /servers` · `PATCH/DELETE /servers/:name` · `POST /servers/:name/enable|disable|reconnect|probe` · `POST /refresh` (ingest YAML + retry failed) · `POST /import` · `POST /export-yaml` · `GET /events` (SSE) · `GET /config` (resolved master switches; writes go through the official settings form)
 
-Project-scoped servers are routed by `?sessionId=<id>` to that session's project store; an absent or invalid session falls back to the global console. `PUT /config` no longer accepts plugin switches — sending them returns 400.
+Project-scoped servers are routed by `?sessionId=<id>` to that session's project store; an absent or invalid session falls back to the global console. `PUT /config` is not supported (405): switches are written through the official settings form.
 
-**Four-layer loopback fence** (borrowed from dsh-skills-mcp-manager): loopback socket peer, loopback Host header (DNS-rebinding fence), no `sec-fetch-site: cross-site` marker, and — when Origin is present — an Origin matching the Host. `GET /config` (UI placement only) stays open to LAN browsers.
+**Four-layer loopback fence** (borrowed from dsh-skills-mcp-manager): loopback socket peer, loopback Host header (DNS-rebinding fence), no `sec-fetch-site: cross-site` marker, and — when Origin is present — an Origin matching the Host. `GET /config` is fenced like every other route.
 
 ## Known limitations (honest wording)
 

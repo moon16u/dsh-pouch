@@ -14,13 +14,11 @@
  * | POST   | /servers/:name/reconnect    | fiber.restart()                    |
  * | POST   | /servers/:name/probe        | side-fiber connectivity test       |
  * | POST   | /import                     | mcpServers JSON import             |
+ * | POST   | /export-yaml                | write the store back to the profile|
  * | GET    | /events                     | SSE status stream                  |
- * | GET    | /config                     | UI config (non-secret)             |
- * | PUT    | /config                     | persist UI config                  |
+ * | GET    | /config                     | resolved master switches           |
  *
- * Loopback fence: every mutating and secret-bearing route answers 403 to
- * non-loopback callers; GET /config (UI placement only) is open so a LAN
- * browser can at least read placement while the data routes stay local.
+ * Loopback fence: every route answers 403 to non-loopback callers.
  * "Loopback" is four checks at once (hardened after dsh-skills-mcp-manager):
  * a loopback socket peer, a Host header naming a loopback origin (DNS
  * rebinding fence), no `sec-fetch-site: cross-site` browser marker, and —
@@ -49,12 +47,11 @@ const LOOPBACK_HOSTNAMES = new Set(["127.0.0.1", "localhost", "[::1]"]);
  * @param {import("@deepseek-ai/cordis").Context} ctx
  * @param {object} services
  * @param {import("./orchestrator.js").Orchestrator} services.orchestrator
- * @param {import("./store.js").Store} services.uiStore store holding the `ui` section
  * @param {() => {enabled: boolean, announceToAgent: boolean}} [services.getPluginConfig]
  *        resolved master switches (settings-GUI backed), surfaced in /health
  * @returns {{ dispose: () => void, notify: () => void }} route handle
  */
-export function registerRoutes(ctx, { orchestrator, uiStore, getPluginConfig, resolveOrchestrator }) {
+export function registerRoutes(ctx, { orchestrator, getPluginConfig, resolveOrchestrator }) {
   const sseClients = new Set();
   let heartbeat = null;
   let notifyTimer = null;
@@ -151,9 +148,8 @@ export function registerRoutes(ctx, { orchestrator, uiStore, getPluginConfig, re
     const segments = url.pathname.slice(ROUTE_PREFIX.length).split("/").filter(Boolean).map(decodeURIComponent);
     const method = req.method ?? "GET";
 
-    // loopback fence: everything except GET /config
-    const isConfigRead = method === "GET" && segments.length === 1 && segments[0] === "config";
-    if (!isConfigRead && !isLoopback(req)) {
+    // loopback fence: no route is exempt
+    if (!isLoopback(req)) {
       respond(res, 403, { error: { code: "forbidden", message: "loopback only" } });
       return;
     }
@@ -210,30 +206,12 @@ export function registerRoutes(ctx, { orchestrator, uiStore, getPluginConfig, re
 
     if (segments[0] === "config") {
       if (method === "GET") {
-        const storeDoc = uiStore.read();
-        respond(res, 200, {
-          ui: sanitizeUi(storeDoc.ui),
-          config: getPluginConfig ? getPluginConfig() : null,
-        });
+        respond(res, 200, { config: getPluginConfig ? getPluginConfig() : null });
         return;
       }
-      if (method === "PUT" || method === "POST") {
-        const body = await readJson(req);
-        let updatedUi;
-        if (body?.ui !== undefined) {
-          updatedUi = sanitizeUi(uiStore.writeUi(sanitizeUi(body.ui)));
-        }
-        let updatedConfig;
-        if (body?.config !== undefined) {
-          throw new ConsoleError("invalid", "Plugin switches are managed by the official settings form; /config only stores UI placement");
-        }
-        respond(res, 200, {
-          ui: updatedUi ?? sanitizeUi(uiStore.read().ui),
-          config: updatedConfig ?? (getPluginConfig ? getPluginConfig() : null),
-        });
-        return;
-      }
-      respond(res, 405, { error: { code: "method_not_allowed", message: "GET or PUT /config" } });
+      // The switches are written through the official settings form; the old
+      // UI-placement section had no reader anywhere and is gone with it.
+      respond(res, 405, { error: { code: "method_not_allowed", message: "GET /config" } });
       return;
     }
 
@@ -373,16 +351,30 @@ function readJson(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     let size = 0;
+    let settled = false;
+    const fail = (error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    };
     req.on("data", (chunk) => {
+      if (settled) return;
       size += chunk.length;
       if (size > BODY_LIMIT) {
-        reject(new ConsoleError("invalid", `body exceeds ${BODY_LIMIT} bytes`));
-        req.destroy();
+        // Reject WITHOUT destroying the socket: the handler still has to write
+        // the 400 JSON answer, and a destroyed request makes the browser see a
+        // connection reset instead of the reason. Draining the rest keeps the
+        // connection reusable.
+        chunks.length = 0;
+        req.resume();
+        fail(new ConsoleError("invalid", `body exceeds ${BODY_LIMIT} bytes`));
         return;
       }
       chunks.push(chunk);
     });
     req.on("end", () => {
+      if (settled) return;
+      settled = true;
       if (chunks.length === 0) {
         resolve(undefined);
         return;
@@ -393,24 +385,6 @@ function readJson(req) {
         reject(new ConsoleError("invalid", `invalid JSON body: ${String(error?.message ?? error)}`));
       }
     });
-    req.on("error", reject);
+    req.on("error", fail);
   });
-}
-
-const UI_POSITIONS = new Set(["top-right", "bottom-right"]);
-
-/** Only known, non-secret UI keys survive into the store. */
-export function sanitizeUi(ui) {
-  const out = { position: "top-right", offsetX: 8, offsetY: 8 };
-  if (ui === null || typeof ui !== "object") return out;
-  if (UI_POSITIONS.has(ui.position)) out.position = ui.position;
-  out.offsetX = clampInt(ui.offsetX, 0, 256, out.offsetX);
-  out.offsetY = clampInt(ui.offsetY, 0, 256, out.offsetY);
-  return out;
-}
-
-function clampInt(value, min, max, fallback) {
-  const n = Number(value);
-  if (!Number.isInteger(n) || n < min || n > max) return fallback;
-  return n;
 }

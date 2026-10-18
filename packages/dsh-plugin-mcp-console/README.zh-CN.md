@@ -18,13 +18,13 @@ dsh plugin --profile web add @moon16u/dsh-plugin-mcp-console
 
 | 能力 | 说明 |
 |---|---|
-| 服务器管理 | 新增（stdio / streamable-http 双模式表单）、编辑、删除、启停、重连；改配置即时生效，无需重启 dsh（删除即用户意志，不留备份文件） |
+| 服务器管理 | 新增（stdio / streamable-http 双模式表单）、编辑、删除、启停、单机重连；改配置即时生效，无需重启 dsh（删除即用户意志，不留备份文件）。编辑表单「高级选项」可设置官方 `reconnect` 策略与 `maxInstructionBytes` |
 | 连接测试 | 每台服务器一键「测试连接」：起一个一次性官方 client fiber（强制 `failOnStartupError`）真实握手，报告工具数与延迟；对运行中的服务器则如实报告实时状态（官方 client 的 serverName 命名空间不允许旁路重连） |
 | 工具级开关 | 展开服务器卡片，点击工具胶囊单独启停；禁用的工具调用会被执行期 guard 拒绝 |
 | 实时状态 | 运行中/连接中/启动中/已停用/失败 分级；SSE 推送刷新，工具数实时联动 |
 | JSON 导入 | 粘贴 Claude / Cursor 风格 `mcpServers` JSON，预览后导入，同名跳过并报告 |
 | Auto-Ingest | 外部 agent / 脚本按官方推荐写入 `cordis.patch.yml` 的 MCP 条目，在启动与「同步配置并刷新状态」时自动移入动态管理。按 YAML 语义读取并定位条目，保留内联 `args`/`env`、`reconnect`、注释与引号；只有成功持久化且与 store 一致的具体条目才从原文件移除，其余原样保留并报告原因 |
-| YAML 回写 | `POST /api/dsh-mcp-console/export-yaml` 把动态配置一键还原为标准 `cordis.patch.yml` 条目（卸载/备份可逆） |
+| YAML 回写 | 顶栏「导出 YAML」（`POST /api/dsh-mcp-console/export-yaml`）把动态配置一键还原为标准 `cordis.patch.yml` 条目（卸载/备份可逆） |
 | 模型感知 | 通过 `ctx.systemPrompt.section` 向每个 agent 的系统提示注入一段公告：MCP 管理请到设置页操作，勿手改配置文件（独立 inject 作用域，无该服务的宿主上自动休眠） |
 | 设置集成 | `enabled` / `announceToAgent` 总开关为 schema 自发现的 `export const Config` 中的 `.volatile()` 字段（rc.2 SettingsForms）：设置 GUI 可改、就地热更新，无需重启 DSH：`enabled` 关闭整体下线（路由 + MCP 连接 + 公告，store 保留），`announceToAgent` 只控制公告；无 settings 服务的宿主回落条目默认值 |
 | 设置 GUI 卡片 | 设置 → 插件 页的「MCP 控制台」卡片（`plugins.item`，键 `ui-mcp-console`）：可折叠、与官方卡片同形（同一批 `--dsw-alias-*` 令牌与尺寸），开关即改即写，被改过的字段带「已自定义」徽章与逐字段「恢复默认」。卡片与开关都通过当前宿主的 `configForms` 服务绑定，服务未组合时整卡自动休眠，MCP 服务器页照常工作 |
@@ -42,11 +42,11 @@ dsh plugin --profile web add @moon16u/dsh-plugin-mcp-console
 
 ## HTTP API（loopback-only，前缀 `/api/dsh-mcp-console/`）
 
-`GET /health` · `GET/POST /servers` · `PATCH/DELETE /servers/:name` · `POST /servers/:name/enable|disable|reconnect|probe` · `POST /refresh`（吸纳 YAML + 重试失败）· `POST /import` · `POST /export-yaml` · `GET /events`（SSE）· `GET/PUT /config`（仅 UI 位置；插件开关只走官方设置表单）
+`GET /health` · `GET/POST /servers` · `PATCH/DELETE /servers/:name` · `POST /servers/:name/enable|disable|reconnect|probe` · `POST /refresh`（吸纳 YAML + 重试失败）· `POST /import` · `POST /export-yaml` · `GET /events`（SSE）· `GET /config`（已解析的总开关；写入走官方设置表单）
 
-项目作用域的服务器按 `?sessionId=<id>` 路由到该会话的项目 store；缺省或无效会话按全局处理。`PUT /config` 不再接受插件开关，写入该字段会返回 400。
+项目作用域的服务器按 `?sessionId=<id>` 路由到该会话的项目 store；缺省或无效会话按全局处理。`PUT /config` 不再支持（返回 405）：开关只走官方设置表单。
 
-**回环围栏四层校验**（借鉴 dsh-skills-mcp-manager）：socket 对端地址、Host 头必须是回环源（防 DNS rebinding）、拒绝 `sec-fetch-site: cross-site`、Origin（若携带）必须与 Host 同源。`GET /config`（仅 UI 位置）对局域网浏览器开放。
+**回环围栏四层校验**（借鉴 dsh-skills-mcp-manager）：socket 对端地址、Host 头必须是回环源（防 DNS rebinding）、拒绝 `sec-fetch-site: cross-site`、Origin（若携带）必须与 Host 同源。`GET /config` 同样受围栏保护。
 
 ## 已知限制（诚实口径）
 

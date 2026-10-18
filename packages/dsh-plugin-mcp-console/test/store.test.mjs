@@ -64,12 +64,3 @@ test("normalizeDoc tolerates junk shapes", () => {
   assert.deepEqual(doc.servers, {});
   assert.ok(error);
 });
-
-test("writeUi keeps servers and persists ui", () => {
-  const { store, dir } = tempStore({ version: 1, servers: { a: { transport: "stdio", command: "x" } } });
-  store.writeUi({ position: "bottom-right", offsetX: 12, offsetY: 3 });
-  const doc = store.read();
-  assert.deepEqual(doc.ui, { position: "bottom-right", offsetX: 12, offsetY: 3 });
-  assert.deepEqual(Object.keys(doc.servers), ["a"]);
-  rmSync(dir, { recursive: true, force: true });
-});

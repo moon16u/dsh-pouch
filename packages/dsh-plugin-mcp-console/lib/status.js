@@ -117,12 +117,3 @@ export function computeSnapshot(orchestrator) {
     clientError: orchestrator.clientError ?? null,
   };
 }
-
-/** Group servers by status for the panel's sectioned list. */
-export function groupByStatus(servers) {
-  const groups = { running: [], connecting: [], loading: [], disabled: [], failed: [] };
-  for (const server of servers) {
-    (groups[server.status] ?? groups.failed).push(server);
-  }
-  return groups;
-}

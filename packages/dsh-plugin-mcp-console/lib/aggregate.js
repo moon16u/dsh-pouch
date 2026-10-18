@@ -14,6 +14,7 @@
  * store holds goes to the project console, everything else to the global one.
  */
 import { computeSnapshot } from "./status.js";
+import { ConsoleError } from "./orchestrator.js";
 
 export class ConsoleAggregate {
   /**
@@ -98,7 +99,9 @@ export class ConsoleAggregate {
     const scope = server?.scope;
     if (scope === "project" && this.projectConsole) return this.projectConsole.add(server);
     if (scope === "project") {
-      return Promise.reject(new Error("project scope is unavailable: no session workspace is attached"));
+      // The route layer maps ConsoleError codes onto statuses; a bare Error
+      // would surface this caller mistake as an internal 500.
+      return Promise.reject(new ConsoleError("invalid", "project scope is unavailable: no session workspace is attached"));
     }
     return this.globalConsole.add(server);
   }

@@ -262,3 +262,41 @@ test("the offline rule and both dictionaries stay in step", { skip: !existsSync(
     assert.equal(typeof en[key], "string", `en is missing ${key}`);
   }
 });
+
+test("per-tool toggles keep stored restrictions of a down server", { skip: !existsSync(reactPath) || !existsSync(reactDomPath) }, async () => {
+  const { react } = loadReactModules();
+  const bundle = await loadBundle(join(here, "..", "lib", "client.js"), react);
+  const next = bundle.mcpNextDisabledTools;
+  assert.equal(typeof next, "function");
+  // Rebuilding from the live list erased stored restrictions whenever the
+  // server was down and therefore exposed no tools at all.
+  const down = { name: "github", disabledTools: ["mcp__github__echo", "mcp__github__list"] };
+  const sorted = (list) => [...list].sort();
+  assert.deepEqual(sorted(next(down, { name: "mcp__github__echo", enabled: false })), ["mcp__github__list"]);
+  assert.deepEqual(sorted(next(down, { name: "mcp__github__echo", enabled: true })), ["mcp__github__echo", "mcp__github__list"]);
+  // A disabled tool that has since disappeared from the live list stays off.
+  const live = { disabledTools: ["mcp__x__gone"], tools: [] };
+  assert.deepEqual(sorted(next(live, { name: "mcp__x__fresh", enabled: true })), ["mcp__x__fresh", "mcp__x__gone"]);
+  // No stored list at all: a plain enable/disable still works.
+  assert.deepEqual(next({}, { name: "mcp__x__t", enabled: true }), ["mcp__x__t"]);
+});
+
+test("the plugin card answers the Plugins page view contract", { skip: !existsSync(reactPath) || !existsSync(reactDomPath) }, async () => {
+  const { react, reactDomServer } = loadReactModules();
+  const bundle = await loadBundle(join(here, "..", "lib", "client.js"), react);
+  const t = (key) => (key === "pluginCardDesc" ? "Console description" : key);
+  const scope = fakeScope({ status: "ready", value: { enabled: true, announceToAgent: true }, user: {}, writable: true });
+  // summary: the card's one-liner — the owner already draws the frame, so
+  // rendering our own card here nested a whole card inside the description.
+  const summary = reactDomServer.renderToStaticMarkup(react.createElement(bundle.McpPluginCard, { t, scope, view: "summary" }));
+  assert.equal(summary, "Console description");
+  assert.doesNotMatch(summary, /mcp-plugin-card/);
+  // page: just the switch body, again without our own card chrome
+  const page = reactDomServer.renderToStaticMarkup(react.createElement(bundle.McpPluginCard, { t, scope, view: "page" }));
+  assert.match(page, /mcp-plugin-body/);
+  assert.doesNotMatch(page, /mcp-plugin-card/);
+  assert.doesNotMatch(page, /mcp-plugin-chevron/);
+  // the standalone section keeps the full card (no view prop there)
+  const standalone = reactDomServer.renderToStaticMarkup(react.createElement(bundle.McpPluginCard, { t, scope }));
+  assert.match(standalone, /mcp-plugin-card/);
+});

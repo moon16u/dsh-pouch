@@ -81,7 +81,6 @@ export function apply(ctx, config) {
   // rc.2: `config` may carry cosmokit volatile refs whose values hot-update in
   // place; keep `current` pointing at it so resolveConfig() reads live values.
   let current = () => config;
-  const globalStore = new Store(globalStorePath());
 
   /** Live surfaces, each an inject fiber that can be torn down and rebuilt. */
   let compositionFiber = null;
@@ -225,7 +224,6 @@ export function apply(ctx, config) {
 
     routes = registerRoutes(scope, {
       orchestrator,
-      uiStore: globalStore,
       getPluginConfig: () => resolveConfig(current()),
       resolveOrchestrator: projectOrchestrator,
     });
@@ -295,7 +293,7 @@ export { Store, globalStorePath, projectStorePath } from "./store.js";
 export { Orchestrator, ConsoleError } from "./orchestrator.js";
 export { computeSnapshot } from "./status.js";
 export { parseMcpServers } from "./import.js";
-export { registerRoutes, ROUTE_PREFIX, sanitizeUi } from "./routes.js";
+export { registerRoutes, ROUTE_PREFIX } from "./routes.js";
 export { validateServerConfig, toClientConfig } from "./clientAdapter.js";
 export {
   ingestProfileMcpEntries,
