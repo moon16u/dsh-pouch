@@ -51,9 +51,10 @@ function scheduleDetachedRestart(delayMs = FIXED_DELAY_MS) {
 # Detached restart helper written by @deepseek-ai/dsh-restart.
 # The outer DSH process may exit while this helper sleeps; once it is
 # reparented to init the sleep below still continues. The restart script is
-# invoked with DSH_RESTART_ALLOWED=1.
+# invoked with DSH_RESTART_ALLOWED=1 through bash so installed packages do not
+# need to preserve its executable bit.
 sleep ${Math.max(0, Number(delayMs) || 0) / 1000}
-exec ${JSON.stringify(SCRIPT)} ${args} >> ${JSON.stringify(join(dshHome, "dsh-restart.schedule.log"))} 2>&1
+exec /bin/bash ${JSON.stringify(SCRIPT)} ${args} >> ${JSON.stringify(join(dshHome, "dsh-restart.schedule.log"))} 2>&1
 `;
   const helperPath = join(dshHome, "dsh-restart-helper.sh");
   mkdirSync(dshHome, { recursive: true });
