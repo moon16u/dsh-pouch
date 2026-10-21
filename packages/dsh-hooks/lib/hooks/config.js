@@ -73,7 +73,7 @@ export function parseConfig(text) {
       const matcher = validateMatcher(group.matcher);
       if (!Array.isArray(group.hooks)) throw new Error(`${event}: expected handlers`);
       for (const raw of group.hooks) {
-        keys(raw, ["id", "type", "command", "timeout", "maxOutputBytes", "contextBytes",
+        keys(raw, ["id", "type", "command", "shell", "timeout", "maxOutputBytes", "contextBytes",
           "async", "enabled", "subagents", "onError", "env", "watchFiles", "statusMessage"], event);
         if (raw.type !== "command") throw new Error("only type: command is supported");
         if (typeof raw.id !== "string" || !/^[a-zA-Z0-9][\w.-]{0,63}$/.test(raw.id) || ids.has(raw.id)) {
@@ -83,6 +83,8 @@ export function parseConfig(text) {
         if (typeof raw.command !== "string" || !raw.command.trim() || raw.command.length > 16384 || raw.command.includes("\0")) {
           throw new Error(`${raw.id}: command must contain 1..16384 characters without NUL`);
         }
+        const shell = raw.shell === undefined ? "auto" : raw.shell;
+        if (!["auto", "bash", "pwsh"].includes(shell)) throw new Error("shell: expected auto, bash or pwsh");
         const env = raw.env ?? {};
         keys(env, Object.keys(env), `${raw.id}.env`);
         if (Object.keys(env).length > 32) throw new Error("env: at most 32 explicit variables");
@@ -106,7 +108,7 @@ export function parseConfig(text) {
           throw new Error("statusMessage: at most 256 characters");
         }
         entries.push({
-          id: raw.id, type: "command", event, matcher, command: raw.command,
+          id: raw.id, type: "command", event, matcher, command: raw.command, shell,
           timeout: integer(raw.timeout, EVENTS[event].observe ? 3 : 30, 1, EVENTS[event].observe ? 10 : 600, "timeout"),
           maxOutputBytes: integer(raw.maxOutputBytes, 65536, 256, 1048576, "maxOutputBytes"),
           contextBytes: integer(raw.contextBytes, 16384, 1, 262144, "contextBytes"),

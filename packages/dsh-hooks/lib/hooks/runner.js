@@ -1,4 +1,5 @@
 import { EVENTS } from "./config.js";
+import { commandSpec } from "./shell.js";
 
 export function bounded(text, bytes) {
   const buffer = Buffer.from(String(text));
@@ -16,16 +17,14 @@ export async function runCommand(subprocess, entry, input, signal) {
   let handle;
   try {
     if (combined.aborted) throw combined.reason;
-    const shell = await subprocess.resolveExecutable("bash", undefined, combined);
+    const spec = await commandSpec(subprocess, entry, combined);
+    combined.throwIfAborted();
     handle = subprocess.spawn({
-      argv: [shell, "--noprofile", "--norc", "-c", entry.command],
+      ...spec,
       cwd: entry.cwd,
       stdio: { stdin: { data: JSON.stringify(input) + "\n" },
         stdout: { maxBytes: entry.maxOutputBytes }, stderr: { maxBytes: entry.maxOutputBytes } },
       graceMs: 500, signal: combined,
-      // Explicitly remove shell startup injections; the provider scrubs credentials.
-      env: { BASH_ENV: undefined, ENV: undefined, NODE_OPTIONS: undefined, ...entry.env,
-        DSH_HOOK_ACTIVE: "1", DSH_HOOK_EVENT: entry.event },
     });
     const outcome = await handle.done;
     const stdout = handle.collected.stdout.readFrom(0);

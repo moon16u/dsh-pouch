@@ -2,6 +2,8 @@
 
 Date: 2026-10-20. Target: official DSH 0.2.1-rc.2 on WSL/POSIX.
 No DSH host patches or automatic command approvals are part of this design.
+This is the historical 2.0 design snapshot. For current Windows/macOS shell
+support and approval migration, see [platforms.md](platforms.md).
 
 ## Current approval flow (2026-10-21)
 

@@ -37,7 +37,9 @@ Reports that matter most:
   PATH are not pinned. Hashing before launch is not an atomic snapshot against a
   concurrent filesystem edit; do not execute in attacker-writable directories.
 - The ledger is outside project declarations, under
-  `$DSH_HOME/workspace-hooks/<profile-hash>.json`, with private file permissions.
+  `$DSH_HOME/workspace-hooks/<profile-hash>.json`, with mode `0600` on POSIX.
+  Windows uses inherited parent directory ACLs; restrict that directory to its
+  owner. POSIX permission bits do not establish a Windows ACL.
   It is not tamper-proof against a process running as the same OS user. Use one
   DSH process per profile; concurrent ledger writers are not supported.
 - Official subprocess environment scrubbing is retained; explicit `env` fields
@@ -54,6 +56,13 @@ Reports that matter most:
 - Disable/revoke applies to later launches. Running hooks finish, time out or
   are cancelled with their caller/plugin lifetime. Crashed runs are not replayed.
   Stop continuation has a three-check cap per turn.
+- Shell selection is included in the reviewed definition. Commands use Bash on
+  POSIX or PowerShell on Windows by default; explicit Bash/PowerShell declarations
+  require the selected executable. No command syntax translation is performed.
+  PowerShell profiles are disabled and protocol input/output use UTF-8.
+- Cleanup inherits the official subprocess provider's containment limits. macOS
+  uses process-group/direct-parent fallback, not a persistent native range owner;
+  intentionally detached descendants are not guaranteed to terminate.
 - `DSH_HOOK_ACTIVE` suppresses this plugin's command engine in inherited DSH
   children. This prevents accidental direct recursion, not malicious recursion
   through a command that clears its environment or calls an existing server.

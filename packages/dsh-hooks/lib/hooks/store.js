@@ -1,6 +1,21 @@
-import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
+
+/** Bounded Windows sharing-violation retries, as in dsh-atomic-write. */
+export function replaceState(temp, path, {
+  platform = process.platform, rename = renameSync,
+  wait = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms),
+} = {}) {
+  let delay = 20;
+  for (let retries = 0;; retries++) {
+    try { rename(temp, path); return; } catch (error) {
+      if (platform !== "win32" || !["EACCES", "EBUSY", "EPERM"].includes(error.code) || retries >= 8) throw error;
+      wait(delay);
+      delay = Math.min(delay * 2, 200);
+    }
+  }
+}
 
 /** Small host-owned ledger. Never accepts trust declarations from project files. */
 export class HookStore {
@@ -24,9 +39,16 @@ export class HookStore {
   flush() {
     mkdirSync(dirname(this.path), { recursive: true, mode: 0o700 });
     const temp = `${this.path}.${randomUUID()}.tmp`;
-    writeFileSync(temp, JSON.stringify(this.data, null, 2) + "\n", { mode: 0o600 });
-    chmodSync(temp, 0o600);
-    renameSync(temp, this.path);
+    let created = false;
+    try {
+      const fd = openSync(temp, "wx", 0o600);
+      created = true;
+      try { writeFileSync(fd, JSON.stringify(this.data, null, 2) + "\n"); } finally { closeSync(fd); }
+      replaceState(temp, this.path);
+    } catch (error) {
+      if (created) unlinkSync(temp);
+      throw error;
+    }
   }
   trusted(key, digest) { return this.data.trust[key]?.hash === digest; }
   disabled(key) { return this.data.disabled[key] === true; }

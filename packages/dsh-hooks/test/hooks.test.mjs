@@ -51,6 +51,7 @@ test("native config defaults are bounded and command execution remains opt-in", 
   assert.equal(entry.async, false);
   assert.equal(entry.maxOutputBytes, 65536);
   assert.equal(entry.onError, "continue");
+  assert.equal(entry.shell, "auto");
   assert.equal(Config({}).commandHooksEnabled, true);
   assert.throws(() => parseConfig('{"hooks":{"PreCompact":[]}}'), /unsupported event/);
 });
@@ -58,6 +59,8 @@ for (const [label, change] of [
   ["unknown event", { event: "PreCompact" }],
   ["MCP type", { type: "mcp_tool" }],
   ["Windows command", { commandWindows: "cmd.exe" }],
+  ["unknown shell", { shell: "cmd" }],
+  ["non-string shell", { shell: 123 }],
   ["empty command", { command: "" }],
   ["negative timeout", { timeout: -1 }],
   ["unbounded timeout", { timeout: 601 }],
@@ -140,7 +143,8 @@ test("trust rollback on persistence failure, bounded history and crash status", 
   const loaded = new HookStore(f.store.path);
   assert.equal(loaded.data.runs.length, 200);
   assert.ok(loaded.data.runs.every((run) => run.status === "interrupted"));
-  assert.equal(fs.statSync(f.store.path).mode & 0o777, 0o600);
+  if (process.platform !== "win32") assert.equal(fs.statSync(f.store.path).mode & 0o777, 0o600);
+  else assert.ok(fs.statSync(f.store.path).isFile());
 });
 test("untrusted hooks never launch; trust, revoke, disable and definition changes are enforced", async (t) => {
   const f = fixture(t);
@@ -255,6 +259,7 @@ test("observation-only output cannot block or inject; cancelled hooks never deny
 test("native subprocess contract uses JSON stdin, no ambient startup injection, bounded output and cleanup", async () => {
   let spec; let terminated = false; let waited = false;
   const subprocess = {
+    terminalEnvironment: async () => ({ platform: "posix" }),
     resolveExecutable: async () => "/bin/bash",
     spawn: (value) => {
       spec = value;
@@ -277,6 +282,7 @@ test("cancelled native launch does not spawn, truncated stdout is not parsed", a
   const entry = { ...definition(), cwd: "/tmp" };
   assert.equal((await runCommand({ spawn: () => assert.fail() }, entry, {}, abort.signal)).status, "cancelled");
   const result = await runCommand({
+    terminalEnvironment: async () => ({ platform: "posix" }),
     resolveExecutable: async () => "/bin/bash",
     spawn: () => ({ done: Promise.resolve({ exitCode: 0 }), terminate() {}, waitForExit: async () => true,
       collected: { stdout: { readFrom: () => ({ text: "tail", lossy: true }) }, stderr: { readFrom: () => ({ text: "" }) } } }),

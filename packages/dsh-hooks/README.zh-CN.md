@@ -39,7 +39,8 @@ Hook 类型、命令、匹配器、超时四项；执行方式等其余字段在
 三类来源累加，任何定义文件都不能授予信任。批准绑定精确定义、实际执行目录和指定的
 固定内容文件；定义或文件内容变化后需重新批准。界面只更新宿主的审批与启停账本，
 不改写声明文件。账本位于 `$DSH_HOME/workspace-hooks/<profile-hash>.json`，
-为私有文件权限；同一 profile 只应由一个 DSH 进程写入。
+POSIX 使用 `0600`，Windows 继承目录 ACL；Windows 用户须限制该目录的访问权限。
+同一 profile 只应由一个 DSH 进程写入。
 
 引擎默认可用，**未经批准的命令不执行**。文件中设置 `commandHooksEnabled: false`
 会禁用所有命令，包括已批准的命令；界面只显示该状态，不提供修改入口。
@@ -62,8 +63,15 @@ dsh plugin --profile web add @moon16u/dsh-hooks
 dsh plugin --profile web add "link:/path/to/dsh-pouch/packages/dsh-hooks"
 ```
 
-宿主代码更新后重启 DSH，再刷新页面。已验证 DSH 0.2.1-rc.2、WSL/POSIX 与 Bash；
-不保证未经验证的后续宿主版本兼容。无需修改 DSH 宿主本身。
+宿主代码更新后重启 DSH，再刷新页面。集成目标为 DSH 0.2.1-rc.2，
+支持 Linux/WSL、macOS 和 Windows。默认 `shell: "auto"` 在 Linux/macOS 使用 Bash，
+Windows 依次查找 PowerShell 7 标准安装路径、PATH、Windows PowerShell 5.1。
+`shell: "bash"` 或 `"pwsh"` 可显式指定；相应 shell 必须安装在 subprocess 执行环境中。
+Windows 上保留 Bash 脚本时需设置 `shell: "bash"` 并保证 Bash 在 PATH 中；
+命令语法不会自动转换。不保证未经验证的后续宿主版本兼容。无需修改 DSH 宿主本身。
+
+升级后归一化定义新增 shell 字段，原有批准指纹失效，钩子需重新审阅批准，不自动迁移授权。
+PowerShell 调用原生程序时需用 `exit $LASTEXITCODE` 传递退出码，包括阻断用的退出码 2。
 
 ## 测试
 
@@ -73,7 +81,14 @@ node --test test/*.test.mjs
 DSH_RUNTIME_ROOT=/path/to/dsh/node_modules node test/official-runtime.mjs
 ```
 
-集成脚本使用已安装的官方 subprocess 服务与临时无害命令。其中适配器映射一组仅在
+默认测试包含官方 subprocess 的隔离原生命令，`Hooks Native Platforms` CI 覆盖
+Ubuntu、Windows、macOS，包括 JSON/Unicode、退出码、超时与取消、后代进程清理、
+环境清理、信任和账本持久化；Windows 额外测试 PowerShell 5.1 回退。
+测试不使用正式 DSH profile、凭据或模型端点。
+
+集成脚本使用已安装的官方 subprocess 服务与临时无害命令，旧脚本显式选择 Bash，
+需已安装 Bash。其中适配器映射一组仅在
 `DSH_HOOK_TEST_FIXTURE` 指向含一个 `.mjs` 适配器与一个 `.sh` 同级的目录时运行，
 不假定任何项目路径。默认测试不发起网络请求，也不调用模型。
-设计说明与能力边界见 [design.md](docs/design.md)。
+官方源码依据和平台限制见 [platforms.md](docs/platforms.md)，
+历史设计说明见 [design.md](docs/design.md)。

@@ -153,7 +153,8 @@ test("toggle review shows one field list, with more configuration still collapse
   assert.ok(!details.props.open);
   assert.ok(text(details).includes("TOKEN=private-value"));
   const labels = all(fields).filter((node) => node.type === "dt").map(text);
-  assert.equal(labels.length, 14); assert.equal(new Set(labels).size, 14);
+  assert.equal(labels.length, 15); assert.equal(new Set(labels).size, 15);
+  assert.ok(labels.includes("shell"));
   assert.ok(!all(tree).some((node) => ["input", "section"].includes(node.type)));
   disclosure.props.onClick(); assert.equal(cancelled, true);
 });

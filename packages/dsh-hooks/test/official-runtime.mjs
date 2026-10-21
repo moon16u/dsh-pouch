@@ -24,7 +24,7 @@ const subprocess = ctx.get("subprocess");
 assert.ok(subprocess, "official subprocess service is mounted");
 const make = (command, timeout = 5, maxOutputBytes = 65536) => ({
   ...parseConfig(JSON.stringify({ hooks: { SessionStart: [{ hooks: [
-    { id: "native-test", type: "command", command, timeout, maxOutputBytes },
+    { id: "native-test", type: "command", shell: "bash", command, timeout, maxOutputBytes },
   ] }] } }))[0], cwd: root,
 });
 try {
@@ -58,7 +58,7 @@ try {
   console.log("PASS: official environment scrubbing");
 
   const config = JSON.stringify({ hooks: { SessionStart: [{ hooks: [
-    { id: "counter", type: "command", command: "printf x >> counter; printf context", timeout: 5 },
+    { id: "counter", type: "command", shell: "bash", command: "printf x >> counter; printf context", timeout: 5 },
   ] }] } });
   const store = new HookStore(path.join(root, "state.json"));
   const engine = new HookEngine({ store, subprocess, home: root, profile: "integration", cwd: root,

@@ -1,6 +1,6 @@
 # Native command hooks contract
 
-Version: 2.0.0. Verified implementation target: DSH 0.2.1-rc.2 on WSL/POSIX.
+Implementation target: DSH 0.2.1-rc.2 on Linux/WSL, macOS and Windows.
 This is a DSH-native command-hook system, not a complete Codex compatibility layer.
 
 ## Configuration and activation
@@ -54,7 +54,8 @@ before approving it. The engine does not interpret Markdown as executable hooks.
 | --- | --- | --- |
 | `id` | Required | Unique per source; 1..64 letters/digits/underscore/dot/hyphen, starts alphanumeric |
 | `type` | Required | Only `command` |
-| `command` | Required | Nonempty Bash string, at most 16384 characters, no NUL |
+| `command` | Required | Nonempty selected-shell command, at most 16384 characters, no NUL |
+| `shell` | `auto` | `auto`, `bash` or `pwsh`; auto selects Bash on POSIX, PowerShell on Windows |
 | `timeout` | 30 seconds | Integer 1..600; observation events default 3, maximum 10 |
 | `maxOutputBytes` | 65536 | Per stdout/stderr stream, integer 256..1048576 |
 | `contextBytes` | 16384 | Model-context cap, integer 1..262144; no unlimited mode |
@@ -96,8 +97,14 @@ All context output is owned by `dsh-command-hooks`. The independent
 
 ## Execution and input
 
-Commands use official `ctx.subprocess`, running Bash with
-`--noprofile --norc -c`. Cwd is the canonical session directory, not the server
+Commands use official `ctx.subprocess`. The provider's `terminalEnvironment()`
+selects the OS family, not the browser's platform. Bash runs with
+`--noprofile --norc -c`; PowerShell runs with
+`-NoLogo -NoProfile -NonInteractive -Command` and UTF-8 input/output pinning.
+Windows probes the PowerShell 7 standard location, PATH and Windows PowerShell
+5.1. Explicit `bash` requires Bash on PATH; explicit `pwsh` on POSIX requires
+PowerShell on PATH. No syntax translation or silent Bash fallback is performed.
+Cwd is the canonical session directory, not the server
 directory. Event data is written as a single JSON object to stdin; no event
 value is interpolated into the command string.
 
@@ -118,6 +125,8 @@ No Codex transcript path or permission-mode emulation is provided.
 Ambient `BASH_ENV`, `ENV` and `NODE_OPTIONS` are removed unless deliberately
 supplied in the trusted `env`; the official provider scrubs credential-shaped
 parent variables.
+PowerShell native-process commands must explicitly propagate
+`exit $LASTEXITCODE`; a terminating PowerShell error is an execution error.
 
 ## Output and decisions
 
@@ -163,6 +172,8 @@ there is no second configuration block or checkbox. Approval does not execute
 the command immediately. File-defined disable and the emergency gate still apply.
 
 Trust is per source/ID/canonical cwd and normalized definition hash. Review
+includes `shell`, defaulted to `auto`; upgrading from the Bash-only version
+invalidates previous fingerprints and requires reapproval. Review
 nonces expire after five minutes and are single-use. The command definition is
 re-read after queueing and before launch; definition edits or pinned-file changes
 invalidate authorization. Revocation and disable apply to queued/future launches.
@@ -178,6 +189,10 @@ The shared ledger is profile-specific, under
 one profile's ledger. Corrupt state prevents the command engine mounting but
 has no fallback loader; consult host logs. Editing settings cannot grant
 trust because trust is not a profile or project declaration field.
+POSIX ledger files use mode `0600`; Windows files inherit the parent directory
+ACL, which the operator must restrict. Windows transient `EACCES`, `EBUSY` and
+`EPERM` replacement failures retry at most eight times, without deleting the
+previous ledger. Persistent failure rolls back the requested trust change.
 
 This is not a sandbox or a same-OS-user security boundary. See [SECURITY.md](../SECURITY.md).
 
@@ -192,6 +207,8 @@ This is not a sandbox or a same-OS-user security boundary. See [SECURITY.md](../
   JSON response. Stderr overflow keeps a bounded tail and an overflow flag.
 - Hooks are finite processes, not daemon launchers. Completion/cancellation
   terminates and joins the official provider's managed process range.
+  macOS uses the official provider's weaker process-group/direct-parent fallback;
+  deliberately detached descendants are outside its cleanup guarantee.
 - Event-result deduplication is process-local and retains 2048 event identities.
   There is no crash-time command replay or exactly-once external-side-effect
   guarantee. A resumed session has a new SessionStart lifecycle.
@@ -201,6 +218,6 @@ This is not a sandbox or a same-OS-user security boundary. See [SECURITY.md](../
 - A previously running record reads as interrupted after restart. Side effects
   completed before interruption cannot be rolled back.
 
-Unsupported: strict PreCompact veto, Interrupt, input rewriting, Windows-native
-commands, MCP/prompt/agent handlers, enterprise-managed hooks, Codex trust import,
+Unsupported: strict PreCompact veto, Interrupt, input rewriting, cmd.exe command
+syntax, MCP/prompt/agent handlers, enterprise-managed hooks, Codex trust import,
 arbitrary regex matching, and automatic retries of failed commands.
