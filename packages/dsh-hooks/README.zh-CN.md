@@ -50,8 +50,13 @@ Hook 类型、命令、匹配器、超时四项；执行方式等其余字段在
 
 ## 安装
 
-以源码方式分发，未发布到 npm。包名为 `@moon16u/dsh-hooks`，
-profile 配置 ID 为 `dsh-hooks`。
+包名为 `@moon16u/dsh-hooks`，profile 配置 ID 为 `dsh-hooks`。
+
+```bash
+dsh plugin --profile web add @moon16u/dsh-hooks
+```
+
+若从本地检出使用，改为挂载包目录，改动源码无需重新发布：
 
 ```bash
 dsh plugin --profile web add "link:/path/to/dsh-pouch/packages/dsh-hooks"

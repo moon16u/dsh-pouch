@@ -63,8 +63,14 @@ JSON stdin/stdout, error policies, limits and compatibility exclusions.
 
 ## Installation
 
-Distributed from source and not published to npm. The package is
-`@moon16u/dsh-hooks` and the profile entry ID is `dsh-hooks`.
+Published as `@moon16u/dsh-hooks`; the profile entry ID is `dsh-hooks`.
+
+```bash
+dsh plugin --profile web add @moon16u/dsh-hooks
+```
+
+From a checkout, mount the package directory instead so edits apply without
+republishing:
 
 ```bash
 dsh plugin --profile web add "link:/path/to/dsh-pouch/packages/dsh-hooks"
