@@ -68,6 +68,24 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # Fail here rather than at `npm publish` when the token is missing, was
+      # revoked, or has expired; a 401 after the test run wastes the whole job.
+      - name: Check the npm token
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "::error::NPM_TOKEN is not set for this repository"
+            exit 1
+          fi
+          whoami="$(npm whoami 2>/dev/null || true)"
+          if [ -z "$whoami" ]; then
+            echo "::error::NPM_TOKEN is not accepted by the registry (revoked or expired?)"
+            exit 1
+          fi
+          echo "token authenticates as $whoami"
+
       - name: Test the package being released
         run: pnpm --filter "@moon16u/${{ steps.release.outputs.package }}" test
 
