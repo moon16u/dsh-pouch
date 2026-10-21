@@ -1,0 +1,119 @@
+name: Publish
+
+# Publishing is driven by the tag, never by a branch push. A maintainer runs
+# scripts/release-check.mjs and scripts/release-tag.mjs locally, then pushes
+# exactly one tag; this workflow publishes only the package that tag names.
+#
+#   tag shape: v<package-directory>@<version>   e.g. vdsh-hooks@2.0.0
+#
+# Because each package versions independently, the tag is what keeps them
+# apart: the version in package.json must match the tag, or the run fails
+# before npm is touched.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+  # --provenance signs the artifact against this workflow run over OIDC.
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Resolve package and version from the tag
+        id: release
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          package="${tag#v}"
+          package="${package%@*}"
+          version="${tag##*@}"
+
+          # Require a non-empty package and a semver-shaped version; the
+          # parameter expansion alone accepts "vdsh-hooks@" with an empty version.
+          if [ "$package" = "$tag" ] || ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::Tag '$tag' is not of the form v<package>@<version>"
+            exit 1
+          fi
+          if [ ! -f "packages/$package/package.json" ]; then
+            echo "::error::Tag '$tag' names packages/$package, which does not exist"
+            exit 1
+          fi
+
+          declared="$(node -p "require('./packages/$package/package.json').version")"
+          if [ "$declared" != "$version" ]; then
+            echo "::error::Tag says $version but packages/$package/package.json says $declared"
+            exit 1
+          fi
+
+          echo "package=$package" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Publishing packages/$package@$version"
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Test the package being released
+        run: pnpm --filter "@moon16u/${{ steps.release.outputs.package }}" test
+
+      # A version already on npm cannot be republished. That is a no-op rather
+      # than a failure so a tag pushed for an existing release stays green;
+      # scripts/release-check.mjs is what refuses a forgotten version bump
+      # before the tag is ever created.
+      - name: Check whether the version is already published
+        id: guard
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          name="$(node -p "require('./packages/${{ steps.release.outputs.package }}/package.json').name")"
+          version="${{ steps.release.outputs.version }}"
+          if npm view "$name@$version" version >/dev/null 2>&1; then
+            echo "::warning::$name@$version is already published; nothing to do"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "$name@$version is not published yet"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish
+        if: steps.guard.outputs.skip != 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        # Publishing the directory keeps the cwd at the repository root, where
+        # setup-node wrote the registry .npmrc that carries the token.
+        run: npm publish "./packages/${{ steps.release.outputs.package }}" --access public --provenance --tag latest
+
+      - name: Verify the published version resolves
+        if: steps.guard.outputs.skip != 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          name="$(node -p "require('./packages/${{ steps.release.outputs.package }}/package.json').name")"
+          version="${{ steps.release.outputs.version }}"
+          # Registry propagation is not instant; poll before calling it a failure.
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if [ "$(npm view "$name@$version" version 2>/dev/null)" = "$version" ]; then
+              echo "$name@$version is live"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::$name@$version did not appear on the registry"
+          exit 1

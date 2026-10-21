@@ -23,6 +23,7 @@
     "cordis.patch.yml"
   ],
   "engines": {
+    "node": ">=20.0.0",
     "dsh": ">=0.2.1-rc.1"
   },
   "peerDependencies": {
