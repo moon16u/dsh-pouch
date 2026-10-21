@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { copyFileSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { copyFileSync, mkdirSync, readFileSync, realpathSync, symlinkSync } from "node:fs";
+import { join } from "node:path";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { Context } from "@deepseek-ai/cordis";
@@ -10,8 +10,14 @@ import { Store } from "../lib/store.js";
 import { Orchestrator } from "../lib/orchestrator.js";
 import { tempDir } from "./helpers/temp.mjs";
 
-test("official MCP client starts and toggles a native stdio fixture with spaced paths", { timeout: 15000 }, async (t) => {
-  const directory = tempDir("stdio space \u6708\u89c1 #");
+async function checkStdioFixture(t, linked = false) {
+  const fixture = tempDir("stdio space \u6708\u89c1 #");
+  const directory = linked ? join(fixture, "linked cwd") : fixture;
+  if (linked) {
+    const target = join(fixture, "physical cwd");
+    mkdirSync(target);
+    symlinkSync(target, directory, process.platform === "win32" ? "junction" : "dir");
+  }
   const script = join(directory, "fixture server.mjs");
   copyFileSync(new URL("./fixtures/stdio-server.mjs", import.meta.url), script);
   const root = new Context();
@@ -46,7 +52,8 @@ test("official MCP client starts and toggles a native stdio fixture with spaced 
   assert.equal(orchestrator.ledger.get("native_fixture")?.error, null);
   assert.deepEqual(orchestrator.toolsOf("native_fixture"), ["mcp__native_fixture__echo"]);
   const started = JSON.parse(readFileSync(join(directory, "started.json"), "utf8"));
-  assert.equal(resolve(started.cwd), resolve(directory));
+  // macOS may report /private/var for a configured /var temporary directory.
+  assert.equal(realpathSync(started.cwd), realpathSync(directory));
   assert.deepEqual(started.args, args.slice(1));
   await orchestrator.setEnabled("native_fixture", false);
   assert.deepEqual(orchestrator.toolsOf("native_fixture"), []);
@@ -54,4 +61,7 @@ test("official MCP client starts and toggles a native stdio fixture with spaced 
   await orchestrator.setEnabled("native_fixture", true);
   assert.deepEqual(orchestrator.toolsOf("native_fixture"), ["mcp__native_fixture__echo"]);
   assert.equal(store.read().servers.native_fixture.enabled, true);
-});
+}
+
+test("official MCP client starts and toggles a native stdio fixture with spaced paths", { timeout: 15000 }, (t) => checkStdioFixture(t));
+test("official MCP client accepts a symlinked stdio working directory", { timeout: 15000 }, (t) => checkStdioFixture(t, true));
