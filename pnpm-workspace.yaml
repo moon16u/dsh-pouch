@@ -8,9 +8,16 @@ packages:
 allowBuilds:
   '@google/genai': false
   protobufjs: false
+  # Hook tests use packaged subprocess runners, not PTY allocation or native builds.
+  '@deepseek-ai/dsh-subprocess-local': false
+  koffi: false
+  node-pty: false
 ignoredBuiltDependencies:
   - '@google/genai'
   - protobufjs
+  - '@deepseek-ai/dsh-subprocess-local'
+  - koffi
+  - node-pty
 minimumReleaseAgeExclude:
   - '@deepseek-ai/dsh-agent@0.2.1-rc.1'
   - '@deepseek-ai/dsh-attachment@0.2.1-rc.1'
