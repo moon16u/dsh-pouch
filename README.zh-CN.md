@@ -10,7 +10,7 @@
 [![DeepSeek Harness](https://img.shields.io/badge/DSH-0.2.1--rc.1-purple.svg)](https://github.com/deepseek-ai/deepseek-harness)
 [![pnpm workspace](https://img.shields.io/badge/pnpm-workspace-orange.svg)](https://pnpm.io/workspaces)
 
-> **dsh-pouch** 是一个包含两个**相互独立、可单独安装**的 [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) 插件的 monorepo。
+> **dsh-pouch** 是一个包含多个**相互独立、可单独安装**的 [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) 插件的 monorepo。
 > 仓库根目录只是 pnpm workspace——它**不是** DSH bundle，不能安装，也从不发布到 npm。按需安装其中任意插件即可。
 
 ---
@@ -21,6 +21,7 @@
 | :--- | :--- | :--- |
 | **[`@moon16u/dsh-restart`](./packages/dsh-restart)** | Host / Web UI | 提供 `/restart` 与 `/dsh-restart` 命令、原生 `🔄 重启` 候选菜单与 `dsh_restart` Agent 工具，实现进程分离的安全 3 秒平滑重启。 |
 | **[`@moon16u/dsh-mcp-console`](./packages/dsh-mcp-console)** | Web UI + Host | 设置页「MCP 服务器」控制台：运行时增删改/启停/重连、工具级开关、SSE 实时状态、mcpServers JSON 导入。零 MCP 协议代码——全部复用官方 `@deepseek-ai/dsh-mcp-client`；profile YAML 里的 MCP 条目在启动/刷新时自动移植为动态管理（可逆回写）。 |
+| **[`@moon16u/dsh-hooks`](./packages/dsh-hooks)** | Host / Web UI | 文件声明的 DSH 命令钩子，覆盖会话启动、提问、工具、审批、Stop 与压缩后等事件，配套只读审批界面。未经批准的命令不执行；信任绑定精确定义、实际执行目录与固定内容文件。以源码分发，不发布 npm。 |
 
 ---
 
@@ -31,6 +32,12 @@
 ```bash
 dsh plugin --profile web add @moon16u/dsh-restart
 dsh plugin --profile web add @moon16u/dsh-mcp-console
+```
+
+`@moon16u/dsh-hooks` 只从源码分发，需以本地目录挂载：
+
+```bash
+dsh plugin --profile web add "link:/path/to/dsh-pouch/packages/dsh-hooks"
 ```
 
 安装后**重启一次 `dsh web`**（bundle 层只在启动时组合）。无需手改 `cordis.patch.yml`——每个包都自带挂载补丁。

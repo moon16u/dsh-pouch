@@ -10,7 +10,7 @@
 [![DeepSeek Harness](https://img.shields.io/badge/DSH-0.2.1--rc.1-purple.svg)](https://github.com/deepseek-ai/deepseek-harness)
 [![pnpm workspace](https://img.shields.io/badge/pnpm-workspace-orange.svg)](https://pnpm.io/workspaces)
 
-> **dsh-pouch** is a monorepo of two independent, standalone [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) plugins.
+> **dsh-pouch** is a monorepo of independent, standalone [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) plugins.
 > The repository root is only a pnpm workspace — it is **not** a DSH bundle, not installable, and never published to npm. Install only the plugins you need.
 
 ---
@@ -21,6 +21,7 @@
 | :--- | :--- | :--- |
 | **[`@moon16u/dsh-restart`](./packages/dsh-restart)** | Host / Web UI | Safe, detached DSH process restart commands (`/restart`, `/dsh-restart`) and agent tool (`dsh_restart`) with native Web UI candidate styling. |
 | **[`@moon16u/dsh-mcp-console`](./packages/dsh-mcp-console)** | Web UI + Host | MCP server console in the settings page: runtime add/edit/enable/disable/reconnect/delete, per-tool switches, live status over SSE, and mcpServers JSON import. Zero MCP protocol code — everything rides the official `@deepseek-ai/dsh-mcp-client`. Profile-YAML MCP entries are auto-migrated into dynamic management on boot/refresh (and exportable back). |
+| **[`@moon16u/dsh-hooks`](./packages/dsh-hooks)** | Host / Web UI | File-defined DSH command hooks across the SessionStart, prompt, tool, permission, Stop and PostCompact seams, with an approval-only GUI. No unapproved command runs; trust binds the exact definition, canonical cwd and pinned files. Source-distributed, not published to npm. |
 
 ---
 
@@ -31,6 +32,12 @@ Each plugin is its own DSH bundle with its own npm package and version. Install 
 ```bash
 dsh plugin --profile web add @moon16u/dsh-restart
 dsh plugin --profile web add @moon16u/dsh-mcp-console
+```
+
+`@moon16u/dsh-hooks` is distributed from source only, so add it from a checkout:
+
+```bash
+dsh plugin --profile web add "link:/path/to/dsh-pouch/packages/dsh-hooks"
 ```
 
 **Restart `dsh web` once** after installing (bundle layers compose at startup). No manual `cordis.patch.yml` edits are needed — every package carries its own patch.

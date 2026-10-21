@@ -1,0 +1,3 @@
+- insert:
+    - id: dsh-hooks
+      name: '@moon16u/dsh-hooks'
