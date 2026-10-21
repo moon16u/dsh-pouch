@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
-import { isSeq, parseDocument } from "yaml";
+import { isDeepStrictEqual } from "node:util";
+import { isMap, isScalar, isSeq, parseDocument } from "yaml";
 import { Store } from "./store.js";
 import { writeFileAtomicSync } from "./atomicFile.js";
 import { formatMcpYamlEntry } from "./yamlMigrator.js";
@@ -67,6 +68,33 @@ export function handoffBlock(servers) {
   return lines.join("\n");
 }
 
+function handoffNode(node) {
+  if (isScalar(node)) return ["scalar", node.tag ?? null, node.value];
+  if (isSeq(node)) return ["sequence", node.tag ?? null, node.items.map(handoffNode)];
+  if (isMap(node)) {
+    const pairs = node.items.map(({ key, value }) => {
+      if (!isScalar(key) || typeof key.value !== "string") throw new Error("Unsupported MCP handoff key");
+      return [handoffNode(key), handoffNode(value)];
+    });
+    pairs.sort((a, b) => JSON.stringify(a[0]).localeCompare(JSON.stringify(b[0])));
+    return ["map", node.tag ?? null, pairs];
+  }
+  throw new Error("Unsupported MCP handoff node");
+}
+
+function sameHandoff(left, right) {
+  if (left === right) return true;
+  if (left === null || right === null) return false;
+  try {
+    // Host profile saves may reflow YAML. Ignore presentation and map order,
+    // but retain tags (especially !!js), values and sequence order.
+    const shape = source => patchDocument(source).map(item => handoffNode(item.node));
+    return isDeepStrictEqual(shape(left), shape(right));
+  } catch {
+    return false;
+  }
+}
+
 /** Mirror accepted global edits before acknowledging them to the GUI. */
 export class HandoffStore extends Store {
   constructor(path, yamlPath) {
@@ -86,7 +114,7 @@ export class HandoffStore extends Store {
     const raw = existsSync(this.yamlPath) ? readFileSync(this.yamlPath, "utf8") : "";
     const { block } = splitHandoff(raw);
     const expected = handoffBlock(doc.servers);
-    if (block !== null && block !== expected) throw new Error("MCP handoff configuration changed outside the console; review it before takeover");
+    if (block !== null && !sameHandoff(block, expected)) throw new Error("MCP handoff configuration changed outside the console; review it before takeover");
     this.expectedBlock = block;
     this.prepared = true;
   }
@@ -113,7 +141,7 @@ export class HandoffStore extends Store {
 
   publish(doc, previous) {
     const { base, block } = splitHandoff(previous);
-    if (block !== this.expectedBlock) throw new Error("MCP handoff configuration changed outside the console; retry after review");
+    if (!sameHandoff(block, this.expectedBlock)) throw new Error("MCP handoff configuration changed outside the console; retry after review");
     const items = patchDocument(base);
     const names = new Set(Object.keys(doc.servers));
     for (const item of items) for (const entry of item.entries) {

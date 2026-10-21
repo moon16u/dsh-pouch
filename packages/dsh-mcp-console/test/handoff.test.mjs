@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
-import { parse } from "yaml";
+import { parse, parseDocument } from "yaml";
 import { Context } from "@deepseek-ai/cordis";
 import { HandoffStore, handoffBlock, splitHandoff, CONSOLE_PACKAGE, HANDOFF_ID, releaseHandoffFibers } from "../lib/handoff.js";
 import { Orchestrator } from "../lib/orchestrator.js";
@@ -36,6 +36,119 @@ test("native handoff preserves latest edits, deletions and unrelated profile con
   assert.ok(text.startsWith("# untouched\n- insert:\n    - id: other\n      name: other\n"));
   assert.deepEqual(entries(text).find(row => row.id === HANDOFF_ID).config.map(row => row.config.serverName), ["newone"]);
   assert.ok(!text.includes("latest path.js"));
+});
+
+function reformatHandoff(raw) {
+  const doc = parseDocument(raw, { customTags: [{ tag: "tag:yaml.org,2002:js", resolve: value => value }] });
+  const group = doc.contents.items[0].get("insert", true).items[0];
+  group.items.reverse();
+  group.get("config", true).items[0].get("config", true).items.reverse();
+  group.commentBefore = " Formatting-only profile edit";
+  return doc.toString({ lineWidth: 60 });
+}
+
+test("takeover accepts YAML reformatting without changing handoff semantics", () => {
+  const { yaml, store } = fixture();
+  store.mutate(servers => { servers.demo = config; });
+  store.enableHandoff();
+  const original = readFileSync(yaml, "utf8");
+  const reformatted = reformatHandoff(original).replace(/\n/g, "\r\n");
+  assert.notEqual(reformatted, original);
+  assert.deepEqual(entries(reformatted), entries(original));
+  writeFileSync(yaml, reformatted);
+  const restarted = new HandoffStore(store.path, yaml);
+  restarted.prepareHandoff();
+  assert.equal(readFileSync(yaml, "utf8"), reformatted, "preparation remains read-only");
+  restarted.enableHandoff();
+  assert.deepEqual(restarted.read(), store.read());
+  assert.equal(splitHandoff(readFileSync(yaml, "utf8")).block, handoffBlock(store.read().servers));
+});
+
+test("host plugin enablement serialization preserves cold takeover", () => {
+  const { yaml, store } = fixture();
+  writeFileSync(yaml, "- id: unrelated-plugin\n  disabled: false\n");
+  store.mutate(servers => { servers.demo = config; });
+  store.enableHandoff();
+  const original = readFileSync(yaml, "utf8");
+  // Match writePluginEnabled(): edit another entry, then String(document).
+  const document = parseDocument(original, { customTags: [{ tag: "tag:yaml.org,2002:js", resolve: value => value }] });
+  document.setIn([0, "disabled"], true);
+  writeFileSync(yaml, String(document));
+  assert.notEqual(splitHandoff(readFileSync(yaml, "utf8")).block, splitHandoff(original).block);
+  const restarted = new HandoffStore(store.path, yaml);
+  restarted.enableHandoff();
+  assert.deepEqual(restarted.read(), store.read());
+  assert.deepEqual(parse(readFileSync(yaml, "utf8"), { customTags: tags })[0], { id: "unrelated-plugin", disabled: true });
+});
+
+test("live mutations accept formatting-only changes before and after handoff preparation", () => {
+  const { yaml, store } = fixture();
+  store.mutate(servers => { servers.demo = config; });
+  store.enableHandoff();
+  writeFileSync(yaml, reformatHandoff(readFileSync(yaml, "utf8")));
+  store.mutate(servers => { servers.demo.args = ["updated.js"]; });
+  assert.deepEqual(entries(readFileSync(yaml, "utf8"))[0].config[0].config.args, ["updated.js"]);
+  const restarted = new HandoffStore(store.path, yaml);
+  restarted.prepareHandoff();
+  writeFileSync(yaml, reformatHandoff(readFileSync(yaml, "utf8")));
+  restarted.enableHandoff();
+  assert.deepEqual(restarted.read().servers.demo.args, ["updated.js"]);
+});
+
+test("semantic handoff edits remain rejected even when YAML is reformatted", () => {
+  const edits = [
+    raw => raw.replace("command: node", "command: edited"),
+    raw => raw.replace("disabled: !!js ", "disabled: "),
+    raw => raw.replace("rows.some", "rows.every"),
+    raw => raw.replace("command: node", "command: &shared node"),
+    raw => raw.replace("command: node", "command: node\n              command: edited"),
+    raw => raw.replace("transport: stdio", "transport: !unknown stdio"),
+    raw => raw.replace("server.js", "changed.js"),
+  ];
+  for (const edit of edits) {
+    const { yaml, store } = fixture();
+    store.mutate(servers => { servers.demo = config; });
+    store.enableHandoff();
+    const before = store.read();
+    const reformatted = reformatHandoff(readFileSync(yaml, "utf8"));
+    const edited = edit(reformatted);
+    assert.notEqual(edited, reformatted, edit.toString());
+    writeFileSync(yaml, edited);
+    assert.throws(() => new HandoffStore(store.path, yaml).prepareHandoff(), /changed outside/);
+    assert.throws(() => store.mutate(servers => { delete servers.demo; }), /changed outside/);
+    assert.deepEqual(store.read(), before);
+    assert.equal(readFileSync(yaml, "utf8"), edited);
+  }
+});
+
+test("handoff server and argument sequence order remain significant", () => {
+  for (const target of ["servers", "args"]) {
+    const { yaml, store } = fixture();
+    store.mutate(servers => {
+      servers.demo = { ...config, args: ["first.js", "second.js"] };
+      servers.other = config;
+    });
+    store.enableHandoff();
+    const original = readFileSync(yaml, "utf8");
+    const doc = parseDocument(original, { customTags: [{ tag: "tag:yaml.org,2002:js", resolve: value => value }] });
+    const servers = doc.contents.items[0].get("insert", true).items[0].get("config", true);
+    const sequence = target === "servers" ? servers : servers.items[0].get("config", true).get("args", true);
+    sequence.items.reverse();
+    writeFileSync(yaml, doc.toString({ lineWidth: 60 }));
+    assert.throws(() => new HandoffStore(store.path, yaml).prepareHandoff(), /changed outside/);
+  }
+});
+
+test("takeover refuses a stale fallback after an unsynchronized JSON edit", () => {
+  const { yaml, store } = fixture();
+  store.mutate(servers => { servers.demo = config; });
+  store.enableHandoff();
+  const original = readFileSync(yaml, "utf8");
+  const changed = store.read();
+  changed.servers.demo.command = "edited";
+  writeFileSync(store.path, JSON.stringify(changed));
+  assert.throws(() => new HandoffStore(store.path, yaml).prepareHandoff(), /changed outside/);
+  assert.equal(readFileSync(yaml, "utf8"), original);
 });
 
 test("restricted servers return disabled without changing managed restrictions or enablement", () => {

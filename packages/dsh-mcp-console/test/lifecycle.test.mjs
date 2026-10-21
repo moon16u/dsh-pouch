@@ -4,12 +4,12 @@ import { copyFileSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { join } from "node:path";
-import { parse } from "yaml";
+import { parse, parseDocument } from "yaml";
 import { Context } from "@deepseek-ai/cordis";
 import ToolRuntime from "@deepseek-ai/dsh-tools";
 import * as consolePlugin from "../lib/index.js";
 import { resolveMcpClient } from "../lib/clientAdapter.js";
-import { CONSOLE_PACKAGE, HANDOFF_ID } from "../lib/handoff.js";
+import { CONSOLE_PACKAGE, HANDOFF_ID, handoffBlock, splitHandoff } from "../lib/handoff.js";
 import { Store } from "../lib/store.js";
 import { formatMcpYamlEntry } from "../lib/yamlMigrator.js";
 import { tempDir } from "./helpers/temp.mjs";
@@ -20,6 +20,9 @@ const { Loader, Group } = await import(pathToFileURL(cordisRequire.resolve("@dee
 const toolsRequire = createRequire(require.resolve("@deepseek-ai/dsh-tools"));
 const { default: SystemPrompt } = await import(pathToFileURL(toolsRequire.resolve("@deepseek-ai/dsh-system-prompt")).href);
 const parseRows = raw => parse(raw, { customTags: [{ tag: "tag:yaml.org,2002:js", resolve: value => ({ __jsExpr: value }) }] }).flatMap(row => row.insert ?? []);
+const reformatProfile = raw => parseDocument(raw, {
+  customTags: [{ tag: "tag:yaml.org,2002:js", resolve: value => value }],
+}).toString({ lineWidth: 60 });
 const waitFor = async (check, label) => {
   for (let i = 0; i < 150; i++) {
     if (check()) return;
@@ -97,6 +100,11 @@ test("real Loader takeover, tool management, live uninstall, cold uninstall and 
   await waitFor(() => payload !== undefined, "tool re-enable did not settle");
   assert.equal(status, 200, payload);
 
+  // Host-side YAML serialization wraps the owner expression without editing it.
+  const beforeFormatting = readFileSync(yaml, "utf8");
+  writeFileSync(yaml, reformatProfile(beforeFormatting));
+  assert.notEqual(readFileSync(yaml, "utf8"), beforeFormatting);
+
   // Models edit the managed JSON, then refresh the running host. Refresh must
   // update both connections and the native handoff, not merely redraw the UI.
   stored.mutate(servers => { servers.demo.args = [script, "edited-through-json"]; });
@@ -119,13 +127,15 @@ test("real Loader takeover, tool management, live uninstall, cold uninstall and 
   roots.pop();
 
   // Fresh host with no console package entry: only native Loader/client code.
+  writeFileSync(yaml, reformatProfile(readFileSync(yaml, "utf8")));
   const cold = await mount();
   await cold.root.loader.root.update(parseRows(readFileSync(yaml, "utf8")));
   await cold.root.loader.await();
   await waitFor(() => cold.root.tools.schemas().length === 1, "cold uninstall fallback failed");
   await cold.root.loader.root.update([owner(), ...parseRows(readFileSync(yaml, "utf8"))]);
   await cold.root.loader.await();
-  await waitFor(() => cold.root.tools.schemas().length === 1 && cold.handler() !== undefined, "reinstall takeover failed");
+  await waitFor(() => cold.root.tools.schemas().length === 1 && cold.handler() !== undefined &&
+    splitHandoff(readFileSync(yaml, "utf8")).block === handoffBlock(stored.read().servers), "reinstall takeover failed");
   assert.equal(errors.length, 0, errors.join("\n"));
   const beforeShutdown = readFileSync(yaml, "utf8");
   await cold.root.fiber.dispose();
