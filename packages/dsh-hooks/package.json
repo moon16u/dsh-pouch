@@ -35,7 +35,7 @@
     "@deepseek-ai/schemastery": "3.18.5"
   },
   "scripts": {
-    "test": "node --test --test-isolation=none test/*.test.mjs"
+    "test": "node --test test/*.test.mjs"
   },
   "keywords": [
     "deepseek-harness",

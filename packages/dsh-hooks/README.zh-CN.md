@@ -68,7 +68,7 @@ dsh plugin --profile web add "link:/path/to/dsh-pouch/packages/dsh-hooks"
 ## 测试
 
 ```bash
-node --test --test-isolation=none test/*.test.mjs
+node --test test/*.test.mjs
 # 复用已安装官方 runtime，仅运行临时无害命令
 DSH_RUNTIME_ROOT=/path/to/dsh/node_modules node test/official-runtime.mjs
 ```

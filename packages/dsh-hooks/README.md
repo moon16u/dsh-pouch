@@ -83,7 +83,7 @@ are not guaranteed compatible. No DSH host patches are required.
 ## Tests
 
 ```bash
-node --test --test-isolation=none test/*.test.mjs
+node --test test/*.test.mjs
 DSH_RUNTIME_ROOT=/path/to/dsh/node_modules node test/official-runtime.mjs
 ```
 
