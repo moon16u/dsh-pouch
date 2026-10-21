@@ -100,9 +100,13 @@ test("real Loader takeover, tool management, live uninstall, cold uninstall and 
   await waitFor(() => payload !== undefined, "tool re-enable did not settle");
   assert.equal(status, 200, payload);
 
-  // Host-side YAML serialization wraps the owner expression without editing it.
+  // Appending host overrides moves the end comment past those unrelated rows.
   const beforeFormatting = readFileSync(yaml, "utf8");
-  writeFileSync(yaml, reformatProfile(beforeFormatting));
+  const document = parseDocument(beforeFormatting, {
+    customTags: [{ tag: "tag:yaml.org,2002:js", resolve: value => value }],
+  });
+  document.add({ id: "unrelated-plugin", disabled: true, config: { enabled: false } });
+  writeFileSync(yaml, String(document));
   assert.notEqual(readFileSync(yaml, "utf8"), beforeFormatting);
 
   // Models edit the managed JSON, then refresh the running host. Refresh must
@@ -115,6 +119,10 @@ test("real Loader takeover, tool management, live uninstall, cold uninstall and 
   await waitFor(() => payload !== undefined, "file-edit refresh did not settle");
   assert.equal(status, 200, payload);
   assert.deepEqual(JSON.parse(payload).failed, []);
+  assert.deepEqual(parse(readFileSync(yaml, "utf8"), {
+    customTags: [{ tag: "tag:yaml.org,2002:js", resolve: value => value }],
+  })[0],
+    { id: "unrelated-plugin", disabled: true, config: { enabled: false } });
   assert.match(readFileSync(yaml, "utf8"), /edited-through-json/);
   assert.deepEqual(JSON.parse(readFileSync(join(home, "started.json"), "utf8")).args, ["edited-through-json"]);
 

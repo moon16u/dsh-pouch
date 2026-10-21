@@ -4,7 +4,7 @@ import { isMap, isScalar, isSeq, parseDocument } from "yaml";
 import { Store } from "./store.js";
 import { writeFileAtomicSync } from "./atomicFile.js";
 import { formatMcpYamlEntry } from "./yamlMigrator.js";
-import { patchDocument } from "./yamlDocument.js";
+import { patchDocument, removeRanges } from "./yamlDocument.js";
 
 export const HANDOFF_ID = "mcp-console-handoff";
 export const HANDOFF_BEGIN = "# ---- MCP console automatic handoff: begin ----";
@@ -44,7 +44,34 @@ export function splitHandoff(raw) {
     throw new Error("MCP handoff markers are damaged; configuration was not overwritten");
   }
   const finish = end + HANDOFF_END.length;
-  return { base: raw.slice(0, start) + raw.slice(finish).replace(/^\r?\n/, ""), block: raw.slice(start, finish).replace(/\r\n/g, "\n") };
+  const region = raw.slice(start, finish);
+  let items;
+  try {
+    items = patchDocument(region);
+  } catch (error) {
+    throw new Error(`MCP handoff configuration changed outside the console; cannot safely identify its group (${error.message})`);
+  }
+  const owners = items.filter(item => item.entries.some(entry => entry.value?.id === HANDOFF_ID));
+  if (owners.length !== 1 || owners[0].entries.length !== 1 || owners[0].range === null) {
+    throw new Error("MCP handoff group ownership is missing or ambiguous; configuration was not overwritten");
+  }
+  if (items.length === 1) {
+    return { base: raw.slice(0, start) + raw.slice(finish).replace(/^\r?\n/, ""), block: region.replace(/\r\n/g, "\n") };
+  }
+  // YAML stores a trailing end marker as a document comment. Host appends put
+  // new overrides before it; remove only the owned group, not those siblings.
+  const owner = owners[0];
+  const owned = region.slice(...owner.range);
+  const body = owned.startsWith(HANDOFF_BEGIN) ? owned.slice(HANDOFF_BEGIN.length).replace(/^\r?\n/, "") : owned;
+  const remainder = removeRanges(region, [
+    owner.range,
+    [0, HANDOFF_BEGIN.length + (region[HANDOFF_BEGIN.length] === "\r" ? 2 : 1)],
+    [end - start, finish - start],
+  ]);
+  return {
+    base: raw.slice(0, start) + remainder + raw.slice(finish).replace(/^\r?\n/, ""),
+    block: `${HANDOFF_BEGIN}\n${body.trimEnd().replace(/\r\n/g, "\n")}\n${HANDOFF_END}`,
+  };
 }
 
 export function handoffBlock(servers) {

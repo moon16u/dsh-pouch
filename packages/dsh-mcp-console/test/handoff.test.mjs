@@ -6,7 +6,7 @@ import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { parse, parseDocument } from "yaml";
 import { Context } from "@deepseek-ai/cordis";
-import { HandoffStore, handoffBlock, splitHandoff, CONSOLE_PACKAGE, HANDOFF_ID, releaseHandoffFibers } from "../lib/handoff.js";
+import { HandoffStore, handoffBlock, splitHandoff, CONSOLE_PACKAGE, HANDOFF_ID, HANDOFF_BEGIN, HANDOFF_END, releaseHandoffFibers } from "../lib/handoff.js";
 import { Orchestrator } from "../lib/orchestrator.js";
 import { formatMcpYamlEntry, ingestProfileMcpEntries } from "../lib/yamlMigrator.js";
 import { tempDir } from "./helpers/temp.mjs";
@@ -79,6 +79,92 @@ test("host plugin enablement serialization preserves cold takeover", () => {
   restarted.enableHandoff();
   assert.deepEqual(restarted.read(), store.read());
   assert.deepEqual(parse(readFileSync(yaml, "utf8"), { customTags: tags })[0], { id: "unrelated-plugin", disabled: true });
+});
+
+function appendProfileOverrides(raw) {
+  const document = parseDocument(raw, { customTags: [{ tag: "tag:yaml.org,2002:js", resolve: value => value }] });
+  document.add({ id: "web-search-free", disabled: true, config: { enabled: false } });
+  document.add({ id: "web", config: { preset: "compact" } });
+  return String(document);
+}
+
+test("host-appended overrides stay outside handoff when its end comment moves to EOF", () => {
+  for (const newline of ["\n", "\r\n"]) {
+    const { yaml, store } = fixture();
+    store.mutate(servers => { servers.demo = config; });
+    store.enableHandoff();
+    const reformatted = appendProfileOverrides(readFileSync(yaml, "utf8")).replace(/\n/g, newline);
+    assert.ok(reformatted.indexOf("- id: web") < reformatted.indexOf(HANDOFF_END));
+    writeFileSync(yaml, reformatted);
+    const split = splitHandoff(reformatted);
+    assert.equal(parse(split.block, { customTags: tags }).length, 1);
+    assert.deepEqual(parse(split.base), [
+      { id: "web-search-free", disabled: true, config: { enabled: false } },
+      { id: "web", config: { preset: "compact" } },
+    ]);
+    const overrides = reformatted.slice(reformatted.indexOf("- id: web"), reformatted.indexOf(HANDOFF_END)).trimEnd();
+    assert.ok(split.base.includes(overrides), "unrelated override bytes are preserved");
+    const restarted = new HandoffStore(store.path, yaml);
+    restarted.prepareHandoff();
+    assert.equal(readFileSync(yaml, "utf8"), reformatted, "preparation remains read-only");
+    restarted.enableHandoff();
+    assert.ok(readFileSync(yaml, "utf8").includes(overrides));
+    assert.equal(splitHandoff(readFileSync(yaml, "utf8")).block, handoffBlock(store.read().servers));
+  }
+});
+
+test("live managed edits preserve overrides inside displaced handoff markers", () => {
+  const { yaml, store } = fixture();
+  store.mutate(servers => { servers.demo = config; });
+  store.enableHandoff();
+  writeFileSync(yaml, appendProfileOverrides(readFileSync(yaml, "utf8")));
+  store.mutate(servers => { servers.demo.args = ["updated.js"]; });
+  const rows = parse(readFileSync(yaml, "utf8"), { customTags: tags });
+  assert.deepEqual(rows.slice(0, 2).map(row => row.id), ["web-search-free", "web"]);
+  assert.deepEqual(entries(readFileSync(yaml, "utf8")).find(row => row.id === HANDOFF_ID).config[0].config.args, ["updated.js"]);
+});
+
+test("handoff extraction preserves comments and siblings on both sides of its group", () => {
+  const { yaml, store } = fixture();
+  store.mutate(servers => { servers.demo = config; });
+  const generated = handoffBlock(store.read().servers);
+  const before = "# Before override\n- id: before\n  config: { label: 'keep me' }\n";
+  const after = "# After override\n- id: after\n  disabled: true\n";
+  const raw = generated.replace(`${HANDOFF_BEGIN}\n`, `${HANDOFF_BEGIN}\n${before}`)
+    .replace(HANDOFF_END, `${after}${HANDOFF_END}`) + "\n";
+  writeFileSync(yaml, raw);
+  store.enableHandoff();
+  const published = readFileSync(yaml, "utf8");
+  assert.ok(published.includes(before));
+  assert.ok(published.includes(after));
+  assert.deepEqual(parse(splitHandoff(published).base).map(row => row.id), ["before", "after"]);
+});
+
+test("displaced markers do not hide real handoff edits or profile conflicts", () => {
+  for (const kind of ["edited group", "conflicting override"]) {
+    const { yaml, store } = fixture();
+    store.mutate(servers => { servers.demo = config; });
+    store.enableHandoff();
+    let raw = appendProfileOverrides(readFileSync(yaml, "utf8"));
+    if (kind === "edited group") raw = raw.replace("command: node", "command: edited");
+    else raw = raw.replace("- id: web-search-free", "- id: mcp-demo");
+    writeFileSync(yaml, raw);
+    const restarted = new HandoffStore(store.path, yaml);
+    assert.throws(() => restarted.enableHandoff(), kind === "edited group" ? /changed outside/ : /conflicts/);
+    assert.equal(readFileSync(yaml, "utf8"), raw);
+  }
+});
+
+test("handoff extraction refuses missing, duplicate and shared-insert ownership", () => {
+  const generated = handoffBlock({ demo: config });
+  const cases = [
+    generated.replace(`id: ${HANDOFF_ID}`, "id: other"),
+    generated.replace(HANDOFF_END, `- insert:\n    - id: ${HANDOFF_ID}\n${HANDOFF_END}`),
+    generated.replace("    - id: mcp-console-handoff", "    - id: other\n      name: other\n    - id: mcp-console-handoff"),
+  ];
+  for (const raw of cases) {
+    assert.throws(() => splitHandoff(raw), /handoff/i);
+  }
 });
 
 test("live mutations accept formatting-only changes before and after handoff preparation", () => {
