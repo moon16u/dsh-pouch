@@ -1,5 +1,5 @@
 window.__ModuleLoader__.load({
-  id: "@moon16u/dsh-plugin-restart",
+  id: "@moon16u/dsh-restart",
   factory: (require) => {
     var module = { exports: {} };
     var exports = module.exports;
@@ -15,24 +15,74 @@ window.__ModuleLoader__.load({
       label: "重启",
       desc: "在 3 秒后平滑重启 DSH 进程",
       fail: "重启调度失败",
+      logs: "日志",
     };
     var en = {
       label: "Restart",
       desc: "Smoothly restart DSH process in 3 seconds",
       fail: "Failed to schedule restart",
+      logs: "Logs",
     };
 
     function apply(ctx) {
       if (ctx.locale && typeof ctx.locale.register === "function") {
         ctx.effect(function () {
           return ctx.locale.register(NS, { zh: zh, en: en });
-        }, "dsh-plugin-restart: dictionaries");
+        }, "dsh-restart: dictionaries");
       }
       var t = (ctx.locale && typeof ctx.locale.bind === "function") ? ctx.locale.bind(NS) : function (k) { return zh[k] || k; };
 
-      ctx.inject(["commandUi"], function (scope) {
+      // Cordis traces borrowed CommandUi calls through this caller's scope.
+      ctx.inject(["commandUi", "remote.commands"], function (scope) {
         var commandUi = scope.get ? scope.get("commandUi") : scope.commandUi;
         if (!commandUi) return;
+
+        // Poll only for detached failures; a broken connection during a normal
+        // restart is not itself a failure. The host identifies the owning chat.
+        if (typeof fetch === "function" && typeof scope.effect === "function") {
+          scope.effect(function () {
+            var stopped = false;
+            var busy = false;
+            var seen = null;
+            var controller = new AbortController();
+            async function poll() {
+              if (stopped || busy) return;
+              busy = true;
+              try {
+                var response = await fetch("/api/dsh-restart/status", {
+                  credentials: "same-origin",
+                  cache: "no-store",
+                  signal: controller.signal,
+                });
+                if (response.status === 404 || response.status === 401) {
+                  stopped = true;
+                  clearInterval(timer);
+                  return;
+                }
+                if (!response.ok) return;
+                var failure = (await response.json()).failure;
+                if (stopped || !failure || !failure.sessionId || !failure.attemptId || seen === failure.attemptId) return;
+                if (typeof commandUi.scopeFor === "function" && !commandUi.scopeFor(failure.sessionId)) return;
+                if (typeof commandUi.noticeFor === "function") {
+                  commandUi.noticeFor(failure.sessionId, "error",
+                    t("fail") + ": " + failure.reason + (failure.logPath ? "\n" + t("logs") + ": " + failure.logPath : ""));
+                  seen = failure.attemptId;
+                }
+              } catch (_) {
+                // Reconnects are expected while DSH restarts.
+              } finally {
+                busy = false;
+              }
+            }
+            var timer = setInterval(poll, 1000);
+            poll();
+            return function () {
+              stopped = true;
+              clearInterval(timer);
+              controller.abort();
+            };
+          });
+        }
 
         if (typeof commandUi.candidates === "function" && !commandUi.__dsh_restart_candidates_wrapped__) {
           commandUi.__dsh_restart_candidates_wrapped__ = true;
@@ -81,43 +131,7 @@ window.__ModuleLoader__.load({
                   }
                 }
               } catch (_) {}
-              try {
-                var sessions = typeof commandUi.sessions === "function" ? commandUi.sessions() : null;
-                var binding = sessions && typeof sessions.binding === "function" ? sessions.binding(pick.session.sessionId) : null;
-                var s = binding ? binding.session : null;
-                if (s && typeof s.command === "function") {
-                  s.command("/restart").then(function (res) {
-                    if (!res || !res.ok || (res.value && res.value.matched === false)) {
-                      return s.command("/dsh-restart");
-                    }
-                  }).catch(function () {
-                    return s.command("/dsh-restart");
-                  });
-                } else if (sessions && typeof sessions.using === "function") {
-                  sessions.using(pick.session.sessionId, { source: "restart" }, function (ref) {
-                    var sess = ref && ref.binding ? ref.binding.session : null;
-                    if (sess && typeof sess.command === "function") {
-                      return sess.command("/restart").then(function (res) {
-                        if (!res || !res.ok || (res.value && res.value.matched === false)) {
-                          return sess.command("/dsh-restart");
-                        }
-                      }).catch(function () {
-                        return sess.command("/dsh-restart");
-                      });
-                    }
-                  }).catch(function (err) {
-                    console.error("[dsh-restart] sessions.using failed:", err);
-                    if (typeof commandUi.noticeFor === "function") {
-                      commandUi.noticeFor(pick.session.sessionId, "error", t("fail") + ": " + (err.message || String(err)));
-                    }
-                  });
-                }
-              } catch (err) {
-                console.error("[dsh-restart] dispatch failed:", err);
-                if (typeof commandUi.noticeFor === "function") {
-                  commandUi.noticeFor(pick.session.sessionId, "error", t("fail") + ": " + (err.message || String(err)));
-                }
-              }
+              commandUi.execute(pick.session, "/restart");
               return "handled";
             }
             return origDispatch(pick);
@@ -131,30 +145,25 @@ window.__ModuleLoader__.load({
             if (typeof line === "string") {
               var tok = line.split(/\s/)[0];
               if (tok === "/restart" || tok === "/dsh-restart") {
+                var outcome;
+                // The RPC envelope can be ok while the command result is an
+                // error. Use the host command lifecycle, not obsolete session.command.
+                var off = typeof scope.on === "function" ? scope.on("command/executed", function (id, name, result) {
+                  if (id === session.sessionId && (name === "restart" || name === "dsh-restart")) outcome = result;
+                }) : null;
                 try {
-                  var sessions = typeof commandUi.sessions === "function" ? commandUi.sessions() : null;
-                  var binding = sessions && typeof sessions.binding === "function" ? sessions.binding(session.sessionId) : null;
-                  var s = binding ? binding.session : null;
-                  if (s && typeof s.command === "function") {
-                    var res = await s.command("/restart").catch(function () { return { ok: false }; });
-                    if (!res || !res.ok || (res.value && res.value.matched === false)) {
-                      res = await s.command("/dsh-restart").catch(function () { return { ok: false }; });
-                    }
-                    var ok = res && res.ok && !(res.value && res.value.matched === false);
-                    if (!ok) {
-                      if (typeof commandUi.noticeFor === "function") {
-                        commandUi.noticeFor(session.sessionId, "error", t("fail"));
-                      }
-                      return { kind: "error", text: t("fail") };
-                    }
-                    return { kind: "success" };
-                  }
+                  var result = await origExecute(session, line, attachments);
+                  if (outcome && outcome.kind === "error") throw new Error(outcome.text);
+                  if (result && result.kind === "error") throw new Error(result.text || t("fail"));
+                  return result;
                 } catch (e) {
-                  console.error("[dsh-restart] execute interception error:", e);
+                  var text = t("fail") + ": " + (e.message || String(e));
                   if (typeof commandUi.noticeFor === "function") {
-                    commandUi.noticeFor(session.sessionId, "error", t("fail") + ": " + (e.message || String(e)));
+                    commandUi.noticeFor(session.sessionId, "error", text);
                   }
-                  return { kind: "error", text: t("fail") };
+                  return { kind: "error", text: text };
+                } finally {
+                  if (typeof off === "function") off();
                 }
               }
             }

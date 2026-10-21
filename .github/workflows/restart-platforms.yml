@@ -1,0 +1,26 @@
+name: Restart Native Platforms
+
+on:
+  push:
+    paths:
+      - 'packages/dsh-restart/**'
+      - '.github/workflows/restart-platforms.yml'
+  pull_request:
+    paths:
+      - 'packages/dsh-restart/**'
+      - '.github/workflows/restart-platforms.yml'
+
+jobs:
+  native-restart:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Test isolated native restart processes
+        run: node --test packages/dsh-restart/test/native-restart.test.mjs packages/dsh-restart/test/native-worker.test.mjs packages/dsh-restart/test/native-integration.test.mjs

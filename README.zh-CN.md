@@ -19,7 +19,7 @@
 
 | 插件 | 类型 | 描述 |
 | :--- | :--- | :--- |
-| **[`@moon16u/dsh-plugin-restart`](./packages/dsh-plugin-restart)** | Host / Web UI | 提供 `/restart` 与 `/dsh-restart` 命令、原生 `🔄 重启` 候选菜单与 `dsh_restart` Agent 工具，实现进程分离的安全 3 秒平滑重启。 |
+| **[`@moon16u/dsh-restart`](./packages/dsh-restart)** | Host / Web UI | 提供 `/restart` 与 `/dsh-restart` 命令、原生 `🔄 重启` 候选菜单与 `dsh_restart` Agent 工具，实现进程分离的安全 3 秒平滑重启。 |
 | **[`@moon16u/dsh-plugin-mcp-console`](./packages/dsh-plugin-mcp-console)** | Web UI + Host | 设置页「MCP 服务器」控制台：运行时增删改/启停/重连、工具级开关、SSE 实时状态、mcpServers JSON 导入。零 MCP 协议代码——全部复用官方 `@deepseek-ai/dsh-mcp-client`；profile YAML 里的 MCP 条目在启动/刷新时自动移植为动态管理（可逆回写）。 |
 
 ---
@@ -29,7 +29,7 @@
 每个插件都是独立的 DSH bundle，拥有独立的 npm 包与版本号。按需安装：
 
 ```bash
-dsh plugin --profile web add @moon16u/dsh-plugin-restart
+dsh plugin --profile web add @moon16u/dsh-restart
 dsh plugin --profile web add @moon16u/dsh-plugin-mcp-console
 ```
 
@@ -39,7 +39,7 @@ dsh plugin --profile web add @moon16u/dsh-plugin-mcp-console
 
 ```bash
 git clone https://github.com/moon16u/dsh-pouch.git ~/dsh-pouch
-dsh plugin --profile web add file:~/dsh-pouch/packages/dsh-plugin-restart
+dsh plugin --profile web add file:~/dsh-pouch/packages/dsh-restart
 ```
 
 ### 从旧的一体化 bundle 迁移
@@ -56,7 +56,7 @@ dsh plugin --profile web remove @moon16u/dsh-pouch
 
 ## 🛠️ 单个插件详解
 
-### 1. `@moon16u/dsh-plugin-restart`
+### 1. `@moon16u/dsh-restart`
 * **痛点**：在修改插件或配置后，需要手动到外部终端重启 DSH 进程；如果在 Agent 内部直接 kill 自身会导致会话卡死；第三方命令在 Web 下拉菜单中缺乏原生图标与中文描述。
 * **解决**：在 DSH 内部注册 `/restart` 与兼容旧版的 `/dsh-restart` 斜杠命令、原生风格的 `🔄 重启 restart` 下拉候选装饰与 `dsh_restart` Agent 工具。采用 detached setsid 异步工作进程，回车或点击后即刻响应并在 3 秒后安全平滑重启。
 

@@ -136,6 +136,6 @@ test("client.js implements exact token matching and locale support", async () =>
   assert.match(clientSrc, /Smoothly restart/);
   assert.match(clientSrc, /Failed to schedule restart/);
   // Failure handling in execute
-  assert.match(clientSrc, /commandUi\.noticeFor\(session\.sessionId, "error", t\("fail"\)\);/);
+  assert.match(clientSrc, /commandUi\.noticeFor\(session\.sessionId, "error", text\);/);
 });
 

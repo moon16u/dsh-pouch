@@ -19,7 +19,7 @@
 
 | Plugin | Type | Description |
 | :--- | :--- | :--- |
-| **[`@moon16u/dsh-plugin-restart`](./packages/dsh-plugin-restart)** | Host / Web UI | Safe, detached DSH process restart commands (`/restart`, `/dsh-restart`) and agent tool (`dsh_restart`) with native Web UI candidate styling. |
+| **[`@moon16u/dsh-restart`](./packages/dsh-restart)** | Host / Web UI | Safe, detached DSH process restart commands (`/restart`, `/dsh-restart`) and agent tool (`dsh_restart`) with native Web UI candidate styling. |
 | **[`@moon16u/dsh-plugin-mcp-console`](./packages/dsh-plugin-mcp-console)** | Web UI + Host | MCP server console in the settings page: runtime add/edit/enable/disable/reconnect/delete, per-tool switches, live status over SSE, and mcpServers JSON import. Zero MCP protocol code — everything rides the official `@deepseek-ai/dsh-mcp-client`. Profile-YAML MCP entries are auto-migrated into dynamic management on boot/refresh (and exportable back). |
 
 ---
@@ -29,7 +29,7 @@
 Each plugin is its own DSH bundle with its own npm package and version. Install exactly the ones you want:
 
 ```bash
-dsh plugin --profile web add @moon16u/dsh-plugin-restart
+dsh plugin --profile web add @moon16u/dsh-restart
 dsh plugin --profile web add @moon16u/dsh-plugin-mcp-console
 ```
 
@@ -39,7 +39,7 @@ dsh plugin --profile web add @moon16u/dsh-plugin-mcp-console
 
 ```bash
 git clone https://github.com/moon16u/dsh-pouch.git ~/dsh-pouch
-dsh plugin --profile web add file:~/dsh-pouch/packages/dsh-plugin-restart
+dsh plugin --profile web add file:~/dsh-pouch/packages/dsh-restart
 ```
 
 ### Migrating from the old all-in-one bundle
@@ -56,7 +56,7 @@ Do not keep the old bundle and the standalone packages installed together — bo
 
 ## 🛠️ Plugin Highlights
 
-### 1. `@moon16u/dsh-plugin-restart`
+### 1. `@moon16u/dsh-restart`
 * **Problem**: After editing plugins or configs, restarting DSH manually in an external terminal is tedious; killing the process directly inside an agent tool causes the session to freeze; stock commands in web chat lack native icons or localized names.
 * **Solution**: Exposes `/restart` (and backwards-compatible `/dsh-restart`) slash commands with native `🔄 Restart restart` slash candidate styling, plus `dsh_restart` agent tool. Spawns an asynchronous detached worker process that returns immediately and restarts cleanly after 3 seconds.
 

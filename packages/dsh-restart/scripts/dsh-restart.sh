@@ -9,8 +9,8 @@
 #
 # Correct usage:
 #   1. In a normal terminal OUTSIDE DSH, from the dsh-pouch repo root:
-#        bash packages/dsh-plugin-restart/scripts/dsh-restart.sh       # prod
-#        bash packages/dsh-plugin-restart/scripts/dsh-restart.sh dev   # dev
+#        bash packages/dsh-restart/scripts/dsh-restart.sh       # prod
+#        bash packages/dsh-restart/scripts/dsh-restart.sh dev   # dev
 #   2. From inside DSH, use the safe interfaces instead:
 #        /dsh-restart                     (command, fixed 3s delay)
 #        dsh_restart                      (agent tool, fixed 3s delay)
@@ -18,7 +18,7 @@
 #      DSH shell marker so it runs as an external command (add a delay so the
 #      tool result can be saved first):
 #        env -u DSH_SHELL DSH_RESTART_ALLOWED=1 \
-#          bash packages/dsh-plugin-restart/scripts/dsh-restart.sh --delay 3000
+#          bash packages/dsh-restart/scripts/dsh-restart.sh --delay 3000
 #
 # The first invocation spawns a detached worker (setsid + nohup) and returns
 # immediately. The worker performs the kill/start sequence and writes progress

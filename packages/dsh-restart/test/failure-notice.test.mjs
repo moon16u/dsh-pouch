@@ -53,7 +53,7 @@ test("apply registers the section through ctx.inject, not a one-shot ctx.get", a
       callback({ get: (name) => (name === "systemPrompt" ? { section: (s) => sections.push(s) } : undefined) });
     },
   });
-  assert.deepEqual(requested, [["systemPrompt"]]);
+  assert.deepEqual(requested, [["connection"], ["systemPrompt"]]);
   assert.equal(sections.length, 1);
   assert.equal(sections[0].name, "dsh-restart:failure-notice");
 });

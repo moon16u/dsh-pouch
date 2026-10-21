@@ -42,7 +42,7 @@ importers:
         specifier: 18.2.0
         version: 18.2.0(react@18.2.0)
 
-  packages/dsh-plugin-restart:
+  packages/dsh-restart:
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: ~4.0.5

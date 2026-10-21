@@ -296,10 +296,13 @@ function handleRetry(res) {
     const startLauncher = () => {
       if (started) return;
       started = true;
+      const executable = config.nativePlan ? process.execPath : "/bin/bash";
+      const args = config.nativePlan ? [scriptPath, "--retry", configPath] : [scriptPath, ...RESTART_ARGS];
       console.log(`[${new Date().toISOString()}] retry requested: port released, rerunning ` +
-        `bash ${scriptPath} ${JSON.stringify(RESTART_ARGS)}`);
-      const child = spawn("/bin/bash", [scriptPath, ...RESTART_ARGS], {
+        `${executable} ${JSON.stringify(args)}`);
+      const child = spawn(executable, args, {
         detached: true,
+        windowsHide: true,
         stdio: "ignore",
         env,
       });
