@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -76,7 +76,7 @@ if (old) {
   const state = JSON.parse(readFileSync(statePath, "utf8"));
   assert.equal(await exited, 0);
   assert.notEqual(replacement.pid, state.pid);
-  assert.equal(replacement.cwd, home);
+  assert.equal(realpathSync(replacement.cwd), realpathSync(home));
   assert.equal(replacement.home, home);
   assert.equal(replacement.shell, undefined);
   assert.deepEqual(replacement.argv.slice(1), [entry, "--test-argument", "space & quote'", "--no-open"]);
