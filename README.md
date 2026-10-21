@@ -20,7 +20,7 @@
 | Plugin | Type | Description |
 | :--- | :--- | :--- |
 | **[`@moon16u/dsh-restart`](./packages/dsh-restart)** | Host / Web UI | Safe, detached DSH process restart commands (`/restart`, `/dsh-restart`) and agent tool (`dsh_restart`) with native Web UI candidate styling. |
-| **[`@moon16u/dsh-plugin-mcp-console`](./packages/dsh-plugin-mcp-console)** | Web UI + Host | MCP server console in the settings page: runtime add/edit/enable/disable/reconnect/delete, per-tool switches, live status over SSE, and mcpServers JSON import. Zero MCP protocol code — everything rides the official `@deepseek-ai/dsh-mcp-client`. Profile-YAML MCP entries are auto-migrated into dynamic management on boot/refresh (and exportable back). |
+| **[`@moon16u/dsh-mcp-console`](./packages/dsh-mcp-console)** | Web UI + Host | MCP server console in the settings page: runtime add/edit/enable/disable/reconnect/delete, per-tool switches, live status over SSE, and mcpServers JSON import. Zero MCP protocol code — everything rides the official `@deepseek-ai/dsh-mcp-client`. Profile-YAML MCP entries are auto-migrated into dynamic management on boot/refresh (and exportable back). |
 
 ---
 
@@ -30,7 +30,7 @@ Each plugin is its own DSH bundle with its own npm package and version. Install 
 
 ```bash
 dsh plugin --profile web add @moon16u/dsh-restart
-dsh plugin --profile web add @moon16u/dsh-plugin-mcp-console
+dsh plugin --profile web add @moon16u/dsh-mcp-console
 ```
 
 **Restart `dsh web` once** after installing (bundle layers compose at startup). No manual `cordis.patch.yml` edits are needed — every package carries its own patch.
@@ -60,7 +60,7 @@ Do not keep the old bundle and the standalone packages installed together — bo
 * **Problem**: After editing plugins or configs, restarting DSH manually in an external terminal is tedious; killing the process directly inside an agent tool causes the session to freeze; stock commands in web chat lack native icons or localized names.
 * **Solution**: Exposes `/restart` (and backwards-compatible `/dsh-restart`) slash commands with native `🔄 Restart restart` slash candidate styling, plus `dsh_restart` agent tool. Spawns an asynchronous detached worker process that returns immediately and restarts cleanly after 3 seconds.
 
-### 2. `@moon16u/dsh-plugin-mcp-console`
+### 2. `@moon16u/dsh-mcp-console`
 * **Problem**: The official way to attach MCP servers is a static `cordis.patch.yml` entry — no GUI, no runtime changes, and every restart to apply an edit. Declared servers show up as untouchable read-only instances.
 * **Solution**: A full **MCP servers** settings section managing the official `@deepseek-ai/dsh-mcp-client` at runtime: one fiber per server via cordis dynamic assembly (hot edit, no DSH restart), master switches, per-tool enable/disable pills, live status + tool lists over SSE, and mcpServers JSON import. External agents writing MCP entries into `cordis.patch.yml` are handled by an auto-ingest engine: on boot/refresh the entries are migrated into `~/.dsh/dsh-mcp.json` (fiber takeover included, YAML trimmed precisely), reversible via `POST /export-yaml`. Secrets stay masked in every API response.
 

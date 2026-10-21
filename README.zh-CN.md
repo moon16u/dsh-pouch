@@ -20,7 +20,7 @@
 | 插件 | 类型 | 描述 |
 | :--- | :--- | :--- |
 | **[`@moon16u/dsh-restart`](./packages/dsh-restart)** | Host / Web UI | 提供 `/restart` 与 `/dsh-restart` 命令、原生 `🔄 重启` 候选菜单与 `dsh_restart` Agent 工具，实现进程分离的安全 3 秒平滑重启。 |
-| **[`@moon16u/dsh-plugin-mcp-console`](./packages/dsh-plugin-mcp-console)** | Web UI + Host | 设置页「MCP 服务器」控制台：运行时增删改/启停/重连、工具级开关、SSE 实时状态、mcpServers JSON 导入。零 MCP 协议代码——全部复用官方 `@deepseek-ai/dsh-mcp-client`；profile YAML 里的 MCP 条目在启动/刷新时自动移植为动态管理（可逆回写）。 |
+| **[`@moon16u/dsh-mcp-console`](./packages/dsh-mcp-console)** | Web UI + Host | 设置页「MCP 服务器」控制台：运行时增删改/启停/重连、工具级开关、SSE 实时状态、mcpServers JSON 导入。零 MCP 协议代码——全部复用官方 `@deepseek-ai/dsh-mcp-client`；profile YAML 里的 MCP 条目在启动/刷新时自动移植为动态管理（可逆回写）。 |
 
 ---
 
@@ -30,7 +30,7 @@
 
 ```bash
 dsh plugin --profile web add @moon16u/dsh-restart
-dsh plugin --profile web add @moon16u/dsh-plugin-mcp-console
+dsh plugin --profile web add @moon16u/dsh-mcp-console
 ```
 
 安装后**重启一次 `dsh web`**（bundle 层只在启动时组合）。无需手改 `cordis.patch.yml`——每个包都自带挂载补丁。
@@ -60,7 +60,7 @@ dsh plugin --profile web remove @moon16u/dsh-pouch
 * **痛点**：在修改插件或配置后，需要手动到外部终端重启 DSH 进程；如果在 Agent 内部直接 kill 自身会导致会话卡死；第三方命令在 Web 下拉菜单中缺乏原生图标与中文描述。
 * **解决**：在 DSH 内部注册 `/restart` 与兼容旧版的 `/dsh-restart` 斜杠命令、原生风格的 `🔄 重启 restart` 下拉候选装饰与 `dsh_restart` Agent 工具。采用 detached setsid 异步工作进程，回车或点击后即刻响应并在 3 秒后安全平滑重启。
 
-### 2. `@moon16u/dsh-plugin-mcp-console`
+### 2. `@moon16u/dsh-mcp-console`
 * **痛点**：官方接入 MCP 的方式是往 `cordis.patch.yml` 写静态条目——没有 GUI、不能运行时增删改，每次改动都要重启；声明出来的服务器在面板里只能是只读摆设。
 * **方案**：设置页新增完整的**MCP 服务器**管理页，基于 cordis 动态装配运行时编排官方 `@deepseek-ai/dsh-mcp-client`（每台一个 fiber，热更新配置、免重启 DSH）：主开关、工具级启停胶囊、SSE 实时状态与工具列表、mcpServers JSON 一键导入。外部 Agent 写进 `cordis.patch.yml` 的 MCP 条目由 Auto-Ingest 引擎接管：启动/刷新时连根移植进 `~/.dsh/dsh-mcp.json`（含 fiber 接管与条目级 YAML 精确修剪），`POST /export-yaml` 可逆回写。所有 API 响应中的凭据一律打码。
 
