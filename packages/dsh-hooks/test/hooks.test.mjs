@@ -25,7 +25,7 @@ function cleanup(root) {
   fs.rmdirSync(root);
 }
 function fixture(t, config = document(), execute) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "_tmp_dsh-hooks-test-"));
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "_tmp_dsh-hooks-test-")));
   const cwd = path.join(root, "workspace");
   const home = path.join(root, "home");
   fs.mkdirSync(cwd); fs.mkdirSync(home); fs.mkdirSync(path.join(cwd, ".git"));
@@ -409,6 +409,19 @@ test("owner API adds same-origin fencing, one-use review and exact-hash trust", 
   const grant = { ...body, action: "trust", nonce: review.data.nonce, confirmation: "RUN AS DSH USER" };
   assert.equal((await api("/action", grant)).status, 200);
   assert.equal((await api("/action", grant)).status, 400);
+  assert.equal(f.engine.inspect(f.cwd).entries[0].trusted, true);
+});
+
+test("approval binds canonical cwd while accepting a native directory alias", async (t) => {
+  const f = fixture(t); const api = apiFixture(f);
+  const alias = path.join(f.root, "workspace-alias");
+  fs.symlinkSync(f.cwd, alias, process.platform === "win32" ? "junction" : "dir");
+  const entry = f.engine.inspect(alias).entries[0];
+  const body = { cwd: alias, key: entry.key, hash: entry.hash };
+  const review = await api("/review", body);
+  assert.equal(review.status, 200);
+  const result = await api("/action", { ...body, action: "trust", nonce: review.data.nonce, confirmation: "RUN AS DSH USER" });
+  assert.equal(result.status, 200, JSON.stringify(result.data));
   assert.equal(f.engine.inspect(f.cwd).entries[0].trusted, true);
 });
 

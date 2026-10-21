@@ -95,7 +95,10 @@ test("official native subprocess scrubs credentials and startup injections but p
       secret: "unset", startup: "unset", options: "unset", explicit: "\u6708 ' &",
       active: "1", event: "SessionStart", cwd: "",
     });
-    assert.equal(fs.realpathSync(env.cwd), fs.realpathSync(f.root));
+    const childDirectory = fs.statSync(env.cwd);
+    const expectedDirectory = fs.statSync(f.root);
+    assert.equal(childDirectory.dev, expectedDirectory.dev);
+    assert.equal(childDirectory.ino, expectedDirectory.ino);
   } finally {
     for (const [key, value] of Object.entries(before)) {
       if (value === undefined) delete process.env[key];

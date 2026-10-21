@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { realpathSync } from "node:fs";
 import { CONFIG_LIMIT } from "./config.js";
 
 export const API = "/api/dsh-hooks";
@@ -74,7 +75,7 @@ export function registerRoutes(ctx, engine) {
       const review = reviews.get(data.nonce);
       reviews.delete(data.nonce);
       if (!review || review.expires < Date.now() || review.key !== data.key || review.hash !== data.hash ||
-          review.cwd !== data.cwd || data.confirmation !== "RUN AS DSH USER") throw new Error("Review expired or confirmation missing");
+          review.cwd !== realpathSync(data.cwd) || data.confirmation !== "RUN AS DSH USER") throw new Error("Review expired or confirmation missing");
     } else if (!["revoke", "disable", "enable"].includes(data.action)) throw new Error("Unsupported action");
     engine.change(data.action, data.cwd, data.key, data.hash);
     return json({ ok: true });
