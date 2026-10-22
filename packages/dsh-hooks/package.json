@@ -1,6 +1,6 @@
 {
   "name": "@moon16u/dsh-hooks",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "File-defined DSH command hooks with approval-only UI, read-only details, lifecycle and tool gates",
   "type": "module",
   "main": "lib/index.js",
