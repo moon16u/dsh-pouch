@@ -118,7 +118,7 @@ test("package.json points to runtime bundles", async () => {
   assert.equal(pkg.dsh.client.platform, "web");
   // standalone-bundle protocol: a patch file + its declaration + engines
   assert.equal(pkg.dsh.bundle.patch, "./cordis.patch.yml");
-  assert.match(pkg.engines.node, />=20/);
+  assert.equal(pkg.engines.node, ">=24.9.0");
   assert.ok(pkg.files.includes("cordis.patch.yml"));
   const patch = await readFile(join(root, "cordis.patch.yml"), "utf8");
   assert.match(patch, /@moon16u\/dsh-mcp-console/);

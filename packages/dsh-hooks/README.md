@@ -78,7 +78,7 @@ dsh plugin --profile web add "link:/path/to/dsh-pouch/packages/dsh-hooks"
 ```
 
 Restart the DSH host after changing host code, then refresh the browser.
-DSH 0.2.1-rc.2 is the integration target on Linux/WSL, macOS and Windows.
+DSH 0.2.2-rc.1 is the integration target on Linux/WSL, macOS and Windows.
 `shell: "auto"` (default) uses Bash on Linux/macOS and PowerShell on Windows.
 Windows probes PowerShell 7's standard installation, PATH, then Windows
 PowerShell 5.1. `shell: "bash"` or `"pwsh"` explicitly selects a shell; it must

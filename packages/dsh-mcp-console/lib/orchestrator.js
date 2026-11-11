@@ -38,6 +38,11 @@ function errorMessage(error) {
   return String(error);
 }
 
+/** Cordis 4.1 retains raw input in config and exposes resolved values separately. */
+function serverNameOf(fiber) {
+  return (fiber?.effectiveConfig ?? fiber?.config)?.serverName;
+}
+
 export class Orchestrator {
   /**
    * @param {import("@deepseek-ai/cordis").Context} ctx owning context; fibers
@@ -156,7 +161,7 @@ export class Orchestrator {
           const owner = fiber?.ctx ? clientScopeOf(fiber.ctx) : undefined;
           if (owner !== undefined && owner !== this.scopeKey) continue;
           if (fiber?.state === FiberState.DISPOSED) continue;
-          const serverName = fiber?.config?.serverName;
+          const serverName = serverNameOf(fiber);
           if (typeof serverName === "string") names.add(serverName);
         }
       }
@@ -227,7 +232,7 @@ export class Orchestrator {
           const owner = fiber?.ctx ? clientScopeOf(fiber.ctx) : undefined;
           if (owner !== undefined && owner !== this.scopeKey) continue;
           if (fiber?.state === FiberState.DISPOSED) continue;
-          const serverName = fiber?.config?.serverName;
+          const serverName = serverNameOf(fiber);
           if (typeof serverName === "string") names.add(serverName);
         }
       }
@@ -256,7 +261,7 @@ export class Orchestrator {
         for (const fiber of runtime.fibers) {
           const owner = fiber?.ctx ? clientScopeOf(fiber.ctx) : undefined;
           if (owner !== undefined && owner !== this.scopeKey) continue;
-          if (fiber?.config?.serverName === name && !this.ledger.has(name) && fiber.state !== FiberState.DISPOSED) {
+          if (serverNameOf(fiber) === name && !this.ledger.has(name) && fiber.state !== FiberState.DISPOSED) {
             await fiber.dispose();
             return true;
           }

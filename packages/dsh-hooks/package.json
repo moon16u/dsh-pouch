@@ -1,6 +1,6 @@
 {
   "name": "@moon16u/dsh-hooks",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "description": "File-defined DSH command hooks with approval-only UI, read-only details, lifecycle and tool gates",
   "type": "module",
   "main": "lib/index.js",
@@ -21,21 +21,21 @@
     "docs"
   ],
   "engines": {
-    "node": ">=22",
-    "dsh": ">=0.2.1-rc.2"
+    "node": ">=24.9.0",
+    "dsh": ">=0.2.2-rc.1"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "~4.0.5",
-    "@deepseek-ai/dsh-llm": ">=0.2.1-rc.2",
-    "@deepseek-ai/schemastery": "~3.18.5"
+    "@deepseek-ai/cordis": "~4.1.0",
+    "@deepseek-ai/dsh-llm": ">=0.2.2-rc.1",
+    "@deepseek-ai/schemastery": "~3.19.0"
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "~4.0.5",
-    "@deepseek-ai/dsh-llm": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-subprocess": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-subprocess-local": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-timeout": "0.2.1-rc.2",
-    "@deepseek-ai/schemastery": "3.18.5"
+    "@deepseek-ai/cordis": "~4.1.0",
+    "@deepseek-ai/dsh-llm": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-subprocess": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-subprocess-local": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-timeout": "0.2.2-rc.1",
+    "@deepseek-ai/schemastery": "3.19.0"
   },
   "scripts": {
     "test": "node --test test/*.test.mjs"

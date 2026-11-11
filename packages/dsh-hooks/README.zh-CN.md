@@ -63,7 +63,7 @@ dsh plugin --profile web add @moon16u/dsh-hooks
 dsh plugin --profile web add "link:/path/to/dsh-pouch/packages/dsh-hooks"
 ```
 
-宿主代码更新后重启 DSH，再刷新页面。集成目标为 DSH 0.2.1-rc.2，
+宿主代码更新后重启 DSH，再刷新页面。集成目标为 DSH 0.2.2-rc.1，
 支持 Linux/WSL、macOS 和 Windows。默认 `shell: "auto"` 在 Linux/macOS 使用 Bash，
 Windows 依次查找 PowerShell 7 标准安装路径、PATH、Windows PowerShell 5.1。
 `shell: "bash"` 或 `"pwsh"` 可显式指定；相应 shell 必须安装在 subprocess 执行环境中。

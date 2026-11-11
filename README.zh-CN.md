@@ -7,7 +7,7 @@
 [English](./README.md) | **中文**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![DeepSeek Harness](https://img.shields.io/badge/DSH-0.2.1--rc.1-purple.svg)](https://github.com/deepseek-ai/deepseek-harness)
+[![DeepSeek Harness](https://img.shields.io/badge/DSH-0.2.2--rc.1-purple.svg)](https://github.com/deepseek-ai/deepseek-harness)
 [![pnpm workspace](https://img.shields.io/badge/pnpm-workspace-orange.svg)](https://pnpm.io/workspaces)
 
 > **dsh-pouch** 是一个包含多个**相互独立、可单独安装**的 [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) 插件的 monorepo。

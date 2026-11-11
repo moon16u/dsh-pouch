@@ -1,6 +1,6 @@
 {
   "name": "@moon16u/dsh-mcp-console",
-  "version": "0.3.10",
+  "version": "0.3.11",
   "description": "Web GUI console for MCP servers: manages the official @deepseek-ai/dsh-mcp-client at runtime — add/edit/enable/disable/reconnect/delete servers, live status, mcpServers JSON import. No MCP protocol code: connection and tool registration are 100% the official client, resolved from the running DSH profile.",
   "type": "module",
   "main": "lib/index.js",
@@ -35,17 +35,17 @@
     }
   },
   "engines": {
-    "node": ">=20.0.0",
-    "dsh": ">=0.2.1-rc.1"
+    "node": ">=24.9.0",
+    "dsh": ">=0.2.2-rc.1"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "~4.0.5",
-    "@deepseek-ai/dsh-mcp-client": ">=0.2.1-rc.1",
-    "@deepseek-ai/dsh-scope": ">=0.2.1-rc.1",
-    "@deepseek-ai/dsh-host-webserver": ">=0.2.1-rc.1",
-    "@deepseek-ai/dsh-settings": ">=0.2.1-rc.1",
-    "@deepseek-ai/dsh-tools": ">=0.2.1-rc.1",
-    "@deepseek-ai/schemastery": "~3.18.5"
+    "@deepseek-ai/cordis": "~4.1.0",
+    "@deepseek-ai/dsh-mcp-client": ">=0.2.2-rc.1",
+    "@deepseek-ai/dsh-scope": ">=0.2.2-rc.1",
+    "@deepseek-ai/dsh-host-webserver": ">=0.2.2-rc.1",
+    "@deepseek-ai/dsh-settings": ">=0.2.2-rc.1",
+    "@deepseek-ai/dsh-tools": ">=0.2.2-rc.1",
+    "@deepseek-ai/schemastery": "~3.19.0"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/dsh-mcp-client": {
@@ -65,7 +65,7 @@
     }
   },
   "dependencies": {
-    "@deepseek-ai/dsh-home-paths": "0.2.1-rc.1",
+    "@deepseek-ai/dsh-home-paths": "0.2.2-rc.1",
     "yaml": "^2.9.1"
   },
   "devDependencies": {

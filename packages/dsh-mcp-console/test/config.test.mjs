@@ -1,10 +1,31 @@
 import { tempDir, recoverTempDir } from "./helpers/temp.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { Context } from "@deepseek-ai/cordis";
+import z from "@deepseek-ai/schemastery";
 import { validateServerConfig, toClientConfig, maskRecord, MASK, SERVER_NAME_PATTERN } from "../lib/clientAdapter.js";
 import { parseMcpServers } from "../lib/import.js";
-import { mergeMasked } from "../lib/orchestrator.js";
+import { mergeMasked, Orchestrator } from "../lib/orchestrator.js";
 import { serverStatus } from "../lib/status.js";
+
+test("external MCP ownership uses the live resolved Fiber config", async (t) => {
+  const ctx = new Context();
+  t.after(() => ctx.fiber.dispose());
+  const fiber = ctx.plugin({
+    name: "mcp-client",
+    Config: z.object({ serverName: z.string().default("resolved-server") }),
+    apply() {},
+  }, {});
+  await fiber.await();
+  const orchestrator = new Orchestrator(ctx, {
+    globalStore: { read: () => ({ servers: {} }) },
+    ingestProfile: false,
+  });
+  assert.deepEqual([...orchestrator.liveServerNames()], ["resolved-server"]);
+  assert.deepEqual([...orchestrator.externalServerNames()], ["resolved-server"]);
+  assert.equal(await orchestrator.disposeExternalFiber("resolved-server"), true);
+  assert.deepEqual([...orchestrator.liveServerNames()], []);
+});
 
 test("serverName pattern mirrors the official contract", () => {
   assert.match("everything", SERVER_NAME_PATTERN);
