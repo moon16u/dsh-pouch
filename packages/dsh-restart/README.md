@@ -26,13 +26,22 @@ Install this plugin as its own DSH bundle:
 dsh plugin --profile web add @moon16u/dsh-restart
 ```
 
-**Restart `dsh web` once** after installing (bundle layers compose at startup). No manual `cordis.patch.yml` edits needed — the package carries its own patch.
+**Restart the host from its external terminal or service manager after installing or updating.** Without HMR, an installed update waits for that restart and the previous command handler remains active. No manual `cordis.patch.yml` edits are needed — the package carries its own patch.
+
+When migrating from `@moon16u/dsh-plugin-restart`, remove the old package before adding this one:
+
+```bash
+dsh plugin --profile web remove @moon16u/dsh-plugin-restart
+dsh plugin --profile web add @moon16u/dsh-restart
+```
+
+Do not keep both packages installed. Use the external terminal or service manager for the first restart after migration.
 
 ## Testing
 ```bash
 npm test
 ```
-Smoke tests set `DSH_RESTART_DRY_RUN=1` and use a temporary `DSH_HOME`; scheduling writes the helper but never spawns it. Packaging and scheduling-failure tests execute only inert scripts in temporary package copies, never the real restart worker. The client bundle is tested with fake RPC outcomes and status responses. Outside these isolated fixtures, omitting the flag schedules a REAL detached restart.
+Smoke tests set `DSH_RESTART_DRY_RUN=1` and use a temporary `DSH_HOME`; scheduling writes the helper but never spawns it. Packaging tests inspect actual offline npm tarballs and reject a missing executable bit. Shell integration tests run the complete packed script with process discovery, service control, HTTP probes and DSH replaced by inert stubs; they cover legacy direct execution and current Bash execution. Scheduling-failure tests execute inert scripts in temporary package copies. The client bundle is tested with fake RPC outcomes and status responses. Outside these isolated fixtures, omitting the flag schedules a REAL detached restart.
 
 The test runner selects platform-appropriate suites. Native tests run on Linux, Windows and macOS and use disposable Node/HTTP hosts, not a live DSH installation. Linux-only shell suites are omitted elsewhere. The `Restart Native Platforms` workflow runs the dependency-free native suites on all three operating systems; native error-page retry uses Node instead of Bash.
 

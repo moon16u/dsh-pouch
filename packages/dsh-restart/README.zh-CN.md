@@ -26,13 +26,22 @@ Windows/macOS Web 宿主使用官方启动器的 `appExit` 服务和独立 Node 
 dsh plugin --profile web add @moon16u/dsh-restart
 ```
 
-安装后需**重启一次 `dsh web`**（bundle 层只在启动时组合）。无需手改 `cordis.patch.yml`——包内自带挂载补丁。
+安装或更新后，需**通过外部终端或服务管理器重启宿主**。没有 HMR 时，已安装的更新等待此次重启生效，旧命令处理器仍在运行。无需手改 `cordis.patch.yml`，包内自带挂载补丁。
+
+从 `@moon16u/dsh-plugin-restart` 迁移时，先移除旧包，再安装新包：
+
+```bash
+dsh plugin --profile web remove @moon16u/dsh-plugin-restart
+dsh plugin --profile web add @moon16u/dsh-restart
+```
+
+不要同时保留这两个包。迁移后的第一次重启使用外部终端或服务管理器。
 
 ## 测试
 ```bash
 npm test
 ```
-冒烟测试设置 `DSH_RESTART_DRY_RUN=1` 并使用临时 `DSH_HOME`，只写 helper、不启动进程。打包和调度失败测试只执行临时包副本中的无害脚本，绝不执行真实重启 worker；客户端 bundle 使用模拟 RPC 结果和状态响应验证。在这些隔离副本之外，不设此标志会调度真实的分离重启。
+冒烟测试设置 `DSH_RESTART_DRY_RUN=1` 并使用临时 `DSH_HOME`，只写 helper、不启动进程。打包测试检查实际离线 npm tarball，缺少执行位时拒绝通过。Shell 集成测试执行包中的完整脚本，进程发现、服务控制、HTTP 探针和 DSH 均替换为无害桩，覆盖旧处理器直接执行及新处理器通过 Bash 执行两条路径。调度失败测试执行临时包副本中的无害脚本；客户端 bundle 使用模拟 RPC 结果和状态响应验证。在这些隔离副本之外，不设此标志会调度真实的分离重启。
 
 测试入口按平台选择用例。原生测试在 Linux、Windows 和 macOS 上使用一次性的 Node/HTTP 测试宿主，不操作现网 DSH；非 Linux 平台略过仅针对 Shell 路径的测试。`Restart Native Platforms` workflow 在三个操作系统上运行不依赖外部包的原生测试；原生错误页的重试使用 Node，不再使用 Bash。
 

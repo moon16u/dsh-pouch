@@ -37,6 +37,8 @@ dsh plugin --profile web add @moon16u/dsh-hooks
 
 **Restart `dsh web` once** after installing (bundle layers compose at startup). No manual `cordis.patch.yml` edits are needed — every package carries its own patch.
 
+For restart package updates or migration from `@moon16u/dsh-plugin-restart`, follow the [restart installation instructions](./packages/dsh-restart/README.md#installation). Activate updates through an external host restart; migration also requires removing the old package.
+
 ### From a local checkout
 
 ```bash

@@ -109,13 +109,31 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Pack and verify restart's executable script
+        id: restart_artifact
+        if: steps.guard.outputs.skip != 'true' && steps.release.outputs.package == 'dsh-restart'
+        run: |
+          set -euo pipefail
+          metadata="$RUNNER_TEMP/dsh-restart-pack.json"
+          npm pack ./packages/dsh-restart --ignore-scripts --offline --json --pack-destination "$RUNNER_TEMP" > "$metadata"
+          filename="$(node -e 'console.log(JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"))[0].filename)' "$metadata")"
+          artifact="$RUNNER_TEMP/$filename"
+          node scripts/verify-restart-package.mjs "$artifact"
+          echo "tarball=$artifact" >> "$GITHUB_OUTPUT"
+
       - name: Publish
         if: steps.guard.outputs.skip != 'true'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        # Publishing the directory keeps the cwd at the repository root, where
-        # setup-node wrote the registry .npmrc that carries the token.
-        run: npm publish "./packages/${{ steps.release.outputs.package }}" --access public --provenance --tag latest
+        # Keep cwd at the repository root, where setup-node wrote the .npmrc.
+        # Restart publishes the exact tarball whose mode was verified above.
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.release.outputs.package }}" = "dsh-restart" ]; then
+            npm publish "${{ steps.restart_artifact.outputs.tarball }}" --access public --provenance --tag latest
+          else
+            npm publish "./packages/${{ steps.release.outputs.package }}" --access public --provenance --tag latest
+          fi
 
       - name: Verify the published version resolves
         if: steps.guard.outputs.skip != 'true'

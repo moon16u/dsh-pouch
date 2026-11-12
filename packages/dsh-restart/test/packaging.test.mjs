@@ -5,6 +5,8 @@ import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { join, dirname } from "node:path";
+import { verifyRestartPackage } from "../../../scripts/verify-restart-package.mjs";
+import { packedFixture } from "./package-fixture.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -21,6 +23,32 @@ test("restart shell script ships next to the module and parses with bash", () =>
   const script = join(root, "scripts", "dsh-restart.sh");
   assert.equal(statSync(script).isFile(), true);
   execFileSync("/bin/bash", ["-n", script]);
+});
+
+test("Git records the restart script's executable bit even when core.fileMode is false", () => {
+  const entry = execFileSync("git", ["ls-files", "--stage", "--", "scripts/dsh-restart.sh"], {
+    cwd: root, encoding: "utf8",
+  });
+  assert.match(entry, /^100755 /);
+});
+
+test("the actual npm tarball preserves mode 0755 for legacy callers", () => {
+  const fixture = packedFixture();
+  try {
+    assert.match(verifyRestartPackage(fixture.archive), /^-rwxr-xr-x /);
+    assert.equal(statSync(join(fixture.pkg, "scripts", "dsh-restart.sh")).mode & 0o777, 0o755);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("the publish guard rejects an actual npm tarball containing a 0644 script", () => {
+  const fixture = packedFixture(0o644);
+  try {
+    assert.throws(() => verifyRestartPackage(fixture.archive), /mode 0755/);
+  } finally {
+    fixture.cleanup();
+  }
 });
 
 test("error page server ships next to the module", () => {

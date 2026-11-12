@@ -37,6 +37,8 @@ dsh plugin --profile web add @moon16u/dsh-hooks
 
 安装后**重启一次 `dsh web`**（bundle 层只在启动时组合）。无需手改 `cordis.patch.yml`——每个包都自带挂载补丁。
 
+更新 restart 包或从 `@moon16u/dsh-plugin-restart` 迁移时，参照 [restart 安装说明](./packages/dsh-restart/README.zh-CN.md#安装)。更新需通过外部重启宿主生效；更名迁移还需移除旧包。
+
 ### 从本地检出的仓库安装
 
 ```bash
